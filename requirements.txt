@@ -1,0 +1,5 @@
+# 選單列小工具需要（其餘模組只用標準函式庫）
+rumps>=0.4.0
+
+# 備援路徑：Python SDK（只在改用 GEMINI_API_KEY 時需要）
+# google-antigravity>=0.1.15

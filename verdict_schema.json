@@ -1,0 +1,6 @@
+{"type":"object","properties":{
+ "verdict":{"type":"string","enum":["成立","不成立","部分成立"]},
+ "reason":{"type":"string","description":"繁體中文，兩句以內"},
+ "caveat":{"type":"string","description":"最容易被忽略的前提或例外，沒有就填『無』"},
+ "confidence":{"type":"number"}},
+ "required":["verdict","reason","caveat","confidence"]}

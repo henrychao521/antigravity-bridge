@@ -1,0 +1,11 @@
+# 個人用量資料，不上傳
+ledger.jsonl
+quota_history.csv
+usage_history.csv
+
+# 金鑰
+.env
+
+__pycache__/
+*.pyc
+.DS_Store
