@@ -34,6 +34,17 @@ python3 token_report.py [小時數]
 ```
 由 launchd 管理（`~/Library/LaunchAgents/com.henry.agy-widget.plist`），**開機自動啟動**，
 崩潰會自動重啟。因為有 KeepAlive，停止一定要走 `launchctl unload`，直接 kill 會被拉回來。
+![選單列小工具](docs/menubar.png)
+
+選單列上長這樣：`◈ G99 C87` —— G 是 Gemini 組、C 是 Claude/GPT 組的 5 小時窗口剩餘 %。
+一眼就知道現在還能不能派工，任一組低於 25% 會變成「⚠︎」。
+
+![展開的下拉選單](docs/menu-open.png)
+
+點開看四個 bucket 的剩餘與重置倒數。上圖那一刻：Gemini 組幾乎沒動（剩 98.9%），
+Claude/GPT 組已經用掉 13%（剩 86.8%）——兩者當天的呼叫次數其實差不多，
+差距全來自兩組配額的單位成本不同（見下方「派工經濟學」）。
+
 每 5 分鐘抓一次額度時，順手把快照追加進 `quota_history.csv`（長期追蹤的資料來源）。
 
 選單列顯示「◈ G99 C87」＝ Gemini 組／Claude·GPT 組的 5 小時窗口剩餘 %，
