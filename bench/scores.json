@@ -1,0 +1,17 @@
+{
+ "gemini-3.7-flash-high": {
+  "score": 4,
+  "conf_wrong": 0.787,
+  "conf_right": 0.912
+ },
+ "gemini-3.1-pro-high": {
+  "score": 5.5,
+  "conf_wrong": 0.917,
+  "conf_right": 0.74
+ },
+ "claude-opus-4-6-thinking": {
+  "score": 4.5,
+  "conf_wrong": 0.667,
+  "conf_right": 0.463
+ }
+}

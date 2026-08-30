@@ -1,11 +1,22 @@
-# 個人用量資料，不上傳
+# ── 機密：絕對不可上傳 ──
+onshape-lab/.token.json
+onshape-lab/.pkce.json
+.env
+*.token.json
+
+# ── 個人用量資料 ──
 ledger.jsonl
 quota_history.csv
 usage_history.csv
+onshape-lab/calls.jsonl
+onshape-lab/out/
 
-# 金鑰
-.env
+# ── 建置暫存 ──
+_pdfsrc.docx
+_pdfsrc.pdf
+toc-pages*.json
 
+# ── 系統 ──
 __pycache__/
 *.pyc
 .DS_Store

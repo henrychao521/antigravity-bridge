@@ -234,7 +234,8 @@ def log_quota_sample(buckets: list[dict] | None = None) -> bool:
 
 
 def run(prompt: str, model: str | None = None, schema: str | None = None,
-        timeout: int = 600, measure_quota: bool = True) -> dict:
+        timeout: int = 600, measure_quota: bool = True,
+        conversation: str | None = None, note: str = "") -> dict:
     """呼叫 agy 並把用量記進 ledger.jsonl。所有派工都應該走這裡。
 
     measure_quota=True 時，呼叫前後各拍一次額度快照（查詢本身 0 token），
@@ -249,6 +250,8 @@ def run(prompt: str, model: str | None = None, schema: str | None = None,
         cmd += ["--model", model]
     if schema:
         cmd += ["--json-schema", schema]
+    if conversation:
+        cmd += ["--conversation", conversation]
 
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -271,10 +274,46 @@ def run(prompt: str, model: str | None = None, schema: str | None = None,
         "usage": data.get("usage", {}),
         "quota_delta_pct": delta,
         "prompt_chars": len(prompt),
+        "note": note,
+        "response": (data.get("response") or ""),
     }
+    slim = {k: v for k, v in entry.items() if k != "response"}
+    slim["resp_chars"] = len(entry["response"])
     with LEDGER.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        f.write(json.dumps(slim, ensure_ascii=False) + "\n")
+    data["response"] = entry["response"]
     return data
+
+
+def supervise(task: str, criteria: str, check, model: str = "gemini-3.1-pro-high",
+              max_rounds: int = 3, timeout: int = 1800, journal=None) -> dict:
+    """主管模式：派工 → 驗收 → 退回重做，直到通過或用完回合。
+
+    check(output_text) 必須回傳 (ok: bool, feedback: str)。
+    feedback 會原封不動退回給它，並且用 --conversation 續談，
+    所以它看得到自己上一版寫了什麼，不是從零重寫。
+
+    為什麼要有這個：模型「自認完成」與「真的通過」是兩回事。驗收條件必須是
+    機器可判定的（跑得起來、數字對得上、schema 合格），不能是「看起來不錯」。
+    """
+    conv = None
+    rounds = []
+    for r in range(1, max_rounds + 1):
+        prompt = task if r == 1 else (
+            f"上一版沒有通過驗收。驗收者的意見如下，請據此修正後重新提交完整版本：\n\n{fb}")
+        cmd_extra = {"conversation": conv} if conv else {}
+        data = run(prompt + ("\n\n【驗收條件】\n" + criteria if r == 1 else ""),
+                   model=model, timeout=timeout, measure_quota=False,
+                   note=f"supervise r{r}", **cmd_extra)
+        conv = data.get("conversation_id") or conv
+        text = data.get("response", "")
+        ok, fb = check(text)
+        rounds.append({"round": r, "ok": ok, "feedback": fb[:400],
+                       "chars": len(text), "status": data.get("status")})
+        print(f"  第 {r} 回合：{'✅ 通過' if ok else '❌ 退回'} — {fb[:70]}")
+        if ok:
+            return {"ok": True, "rounds": rounds, "output": text, "conversation_id": conv}
+    return {"ok": False, "rounds": rounds, "output": text, "conversation_id": conv}
 
 
 def _quota_map() -> dict[str, float]:

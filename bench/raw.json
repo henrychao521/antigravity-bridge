@@ -1,0 +1,143 @@
+{
+ "gemini-3.7-flash-high": {
+  "answers": [
+   {
+    "answer": "不可行。正確做法是使用 evPlane(context, {\"face\": face}) 取得包含 origin 與 normal 的 Plane 物件。",
+    "confidence": 0.95,
+    "q": 1
+   },
+   {
+    "answer": "targets 放要保留並承接合併結果的目標實體 Query，tools 則放要被合併並消耗的工具實體 Query。",
+    "confidence": 0.9,
+    "q": 2
+   },
+   {
+    "answer": "標準幾何操作函式名稱為 opCuboid。",
+    "confidence": 0.9,
+    "q": 3
+   },
+   {
+    "answer": "傳入的 id 為 Id 型別。可以直接寫 id + \"base\"，FeatureScript 有提供運算子多載來建立子 Id。",
+    "confidence": 0.85,
+    "q": 4
+   },
+   {
+    "answer": "版本標頭格式為 FeatureScript <version>;，隨版本持續遞增（目前約在 2400～2600 以上區間）。",
+    "confidence": 0.5,
+    "q": 5
+   },
+   {
+    "answer": "回傳的是 ValueWithUnits 型別。若要取得立方公釐純數字，寫法為 evVolume(...) / (millimeter^3)。",
+    "confidence": 0.95,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 的 sketchPlane 接受實體拓撲的 Query 型別；newSketchOnPlane 則接受純幾何數學定義的 Plane 物件型別。",
+    "confidence": 0.9,
+    "q": 7
+   },
+   {
+    "answer": "parameters 只會包含 API 請求中傳入的參數。precondition 中的預設值僅供前端 UI 使用，不會自動生效補齊。",
+    "confidence": 0.85,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 32.0,
+  "tokens": 38125
+ },
+ "gemini-3.1-pro-high": {
+  "answers": [
+   {
+    "answer": "不可行，evBox3d 取得的是邊界框。正確做法應使用 evPlane(context, {\"face\": face}) 來取得平面定義（包含原點與外法線）。",
+    "confidence": 0.9,
+    "q": 1
+   },
+   {
+    "answer": "tools 放準備要合併的工具實體 Query，targets 放接收合併的目標實體 Query。做 UNION 時兩者合併地位其實對等，會將這兩群實體聯集在一起。",
+    "confidence": 0.85,
+    "q": 2
+   },
+   {
+    "answer": "在 FeatureScript 中，正確的標準函式名稱為 opCuboid（操作層級）或 fCuboid（特徵層級）。",
+    "confidence": 0.95,
+    "q": 3
+   },
+   {
+    "answer": "傳入的 id 是 FeatureScript 專屬的 Id 型別（內部實作類似字串陣列）。可以直接寫 id + \"base\"，這會正確串接出下一個層級的新 Id。",
+    "confidence": 0.95,
+    "q": 4
+   },
+   {
+    "answer": "因 Onshape 每幾週就會定期發布新版本並更新版號，我無法確切給出 2026 年此時當下精準的 libraryVersion 數字。",
+    "confidence": 0.1,
+    "q": 5
+   },
+   {
+    "answer": "回傳的是帶有物理單位的 ValueWithUnits 型別。若要取得以立方公釐為單位的純數字，寫法為 evVolume(context, query) / (millimeter ^ 3)。",
+    "confidence": 0.95,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 接受代表模型平面的實體 Query；而 newSketchOnPlane 接受的是純幾何的 Plane 數值型別（包含原點與座標軸定義）。",
+    "confidence": 0.9,
+    "q": 7
+   },
+   {
+    "answer": "未明確給定的參數會呈現缺失狀態，因為 precondition 裡的預設值主要是供客戶端 UI 填補用的。透過 REST API 呼叫時這些預設值不會自動生效，必須手動在請求中明確傳入完整參數。",
+    "confidence": 0.85,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 50.2,
+  "tokens": 30819
+ },
+ "claude-opus-4-6-thinking": {
+  "answers": [
+   {
+    "answer": "不可行。evBox3d 回傳的是 Box3d（包圍盒），不含法線資訊。正確做法是使用 evPlane(context, { \"face\" : face })，它會回傳一個 Plane，其中包含 .origin（面上一點）與 .normal（外法線向量）。",
+    "confidence": 0.85,
+    "q": 1
+   },
+   {
+    "answer": "targets 放要保留的主體（留下來的 body 的 query），tools 放要被合併進去的體（將被消耗的 body 的 query）。兩者皆為 Query 型別，指向 solid body。",
+    "confidence": 0.72,
+    "q": 2
+   },
+   {
+    "answer": "沒有單一「建立長方體」的 op 級函式。標準做法是先 newSketchOnPlane → skRectangle → skSolve → opExtrude。如果是 Feature 層級，可用 fCuboid，但我對 fCuboid 是否為標準庫公開函式不太確定，信心偏低。",
+    "confidence": 0.4,
+    "q": 3
+   },
+   {
+    "answer": "id 的型別是 Id。可以直接寫 id + \"base\"，這會產生一個子 Id（child Id），FeatureScript 的 + 運算子對 Id 與字串有重載，用來建立 operation 的子識別碼。",
+    "confidence": 0.78,
+    "q": 4
+   },
+   {
+    "answer": "libraryVersion 會隨 Onshape 版本持續遞增，我無法確認截至 2026 年 8 月的確切數字。依過去的增長趨勢，可能在 2400–2600 的範圍，但這是猜測。",
+    "confidence": 0.1,
+    "q": 5
+   },
+   {
+    "answer": "evVolume 回傳的是帶單位的值（ValueWithUnits，單位為體積），不是純數字。要得到以立方公釐為單位的純數字，寫法為 evVolume(context, {...}) / cubicMillimeter。",
+    "confidence": 0.72,
+    "q": 6
+   },
+   {
+    "answer": "newSketchOnPlane 接受一個 Plane 值（由 origin、normal、x 軸定義的幾何平面物件）作為 sketchPlane；newSketch 則接受一個 Query（指向已有的平面面或 mate connector 等拓撲實體）。前者用數學平面開草圖，後者用模型中已有的面開草圖。",
+    "confidence": 0.5,
+    "q": 7
+   },
+   {
+    "answer": "透過 REST API 加入特徵時，parameters 陣列中未明確指定的參數會使用 precondition 中定義的預設值（包括自訂 LengthBoundSpec 的預設值）。也就是說預設值會生效，但前提是 API 呼叫時該參數確實未被包含在 parameters 中。",
+    "confidence": 0.45,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 62.7,
+  "tokens": 32020
+ }
+}

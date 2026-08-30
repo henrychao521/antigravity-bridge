@@ -1,0 +1,7 @@
+{"type":"object","properties":{
+ "answers":{"type":"array","minItems":8,"maxItems":8,"items":{"type":"object","properties":{
+   "q":{"type":"integer"},
+   "answer":{"type":"string","description":"直接給答案，繁體中文，兩句以內"},
+   "confidence":{"type":"number","description":"0~1"}},
+   "required":["q","answer","confidence"]}}},
+ "required":["answers"]}

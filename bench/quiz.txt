@@ -1,0 +1,16 @@
+【不要使用任何工具，不要查文件，憑你自己的知識作答】
+
+以下 8 題關於 Onshape FeatureScript。請逐題直接給答案，並附上你對該題的信心（0~1）。
+不確定就給低信心，不要硬掰——信心校準本身也是評分項目。
+
+1. 在 import 了 onshape/std/geometry.fs 的自訂特徵裡，若要取得一個平面的「面上一點與外法線」，
+   使用 evBox3d(context, {"topology": face}) 這個寫法可行嗎？如果不行，正確做法是什麼？
+2. 呼叫 opBoolean 做 BooleanOperationType.UNION 時，tools 與 targets 這兩個鍵應該各放什麼？
+3. 要在 FeatureScript 中直接建立一個長方體實體，標準函式的正確名稱是什麼？
+4. 在 MCP 工具 test_featurescript 執行的匿名 lambda 裡，傳入的 id 參數實際上是什麼型別？
+   可以直接寫 id + "base" 嗎？
+5. 目前 Onshape FeatureScript 的 libraryVersion（版本標頭該寫的數字）是多少？
+6. evVolume 回傳的是純數字還是別的型別？若要得到以立方公釐為單位的純數字要怎麼寫？
+7. newSketch 與 newSketchOnPlane 的差別是什麼？各自接受什麼型別的 sketchPlane？
+8. 透過 REST API 把一個自訂特徵加進 Part Studio 時，該特徵的 parameters 會是什麼狀態？
+   在 precondition 中用自訂 LengthBoundSpec 設定的預設值會生效嗎？
