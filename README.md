@@ -18,6 +18,51 @@ agy -p "提示" --output-format json --model gemini-3.7-flash-high --json-schema
 - 每次呼叫有 ~26–30k input token 底盤（harness 系統提示），續問會走 cache。
 - 延遲 2.4s～240s 都出現過，**腳本一定要包 timeout**。
 
+## 目錄
+
+| 位置 | 內容 |
+|---|---|
+| `ANTIGRAVITY_規範.md` | **派工規範**——模型實測比較、成本模型、五條硬規則、主管模式。可複製到新對話 |
+| `onshape-lab/` | 用兩個代理式 AI 操作 Onshape 官方 FeatureScript MCP 的完整歷程與三份報告 |
+| `bench/` | 模型能力測驗與主管模式示範 |
+| 根目錄 `*.py` | 計量與派工工具 |
+
+## onshape-lab：雙代理操作 Onshape
+
+Onshape 於 2026-08 推出官方 FeatureScript MCP Server。這個資料夾記錄一次完整實作：
+接通、除錯、驗證，以及**如何避免自己騙自己**。
+
+- [`JOURNAL.md`](onshape-lab/JOURNAL.md)：20 輪除錯逐輪紀錄
+- [`onshape_mcp.py`](onshape_mcp.py)：自實作的 OAuth + MCP 用戶端（官方走 DCR，
+  互動式授權在非互動 session 跑不了）
+- [`probe.py`](onshape-lab/probe.py)：每次 2 呼叫的編譯探測器。
+  **官方 `put_featurescript` 宣稱回報錯誤，實測對壞碼也回空字串，不可信**
+
+**三通道交叉驗證**（防幻覺的核心）：
+
+| 通道 | 執行者 | 建構方式 | 體積 (mm³) |
+|---|---|---|---|
+| A | Claude | 草圖 + opExtrude，FeatureScript 內量測 | 204712.389 |
+| B | Claude | 持久化模型，REST massproperties | 204841.875 |
+| C | **Antigravity** | **fCylinder 直造，自行連 MCP** | **204712.389** |
+
+B − A = 129.486 mm³，等於 Pappus 定理算出的圓角體積解析解，**誤差 0.0000%**。
+
+模型可線上打開：`cad.onshape.com/documents/1674ae64c50f46714b4101f1/w/06f6a9cd7bd466a776a9cd52/e/70920e24320830591d8f8b79`
+
+### 三個模型的知識測驗
+
+8 題有實測標準答案的 FeatureScript 測驗（標準答案來自實際執行結果，非文獻）：
+
+| 模型 | 得分 | 答錯時平均信心 |
+|---|---|---|
+| `gemini-3.1-pro-high` | 5.5 / 8 | 0.92（最不會示弱） |
+| `claude-opus-4-6-thinking` | 4.5 / 8 | 0.67（最誠實） |
+| `gemini-3.7-flash-high` | 4 / 8 | 0.79 |
+
+**三家在兩題上全錯**，而那兩題正是實際卡最久的坑。
+**冷門 API 要測不要問；模型自陳信心不可當可信度指標。**
+
 ## 工具
 
 ### token_report.py — 派工前先看這個
