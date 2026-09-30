@@ -14,6 +14,11 @@ try:
 except ImportError:
     agy_meter = None
 
+try:
+    import agy_guard
+except ImportError:
+    agy_guard = None
+
 import rumps
 
 
@@ -44,13 +49,33 @@ class AgyQuotaWidget(rumps.App):
         super().__init__(name="AgyWidget", title="◈ --", quit_button=None)
 
         self.cached_data: list[dict] = []
+        self.quota_meta: dict = {}
         self.needs_ui_update = False
         self.fetch_lock = threading.Lock()
         self.is_fetching = False
 
+        # 2026-09-30：所在網路區域（agy_guard.network_zone），放在選單最上面。
+        # 在封鎖網路（例如學校網域）時完全不查額度，避免反覆啟動 agy。
+        self.zone: dict = {}
+        self.net_item = rumps.MenuItem(title="網路　偵測中...")
+        self.net_detail_item = rumps.MenuItem(title="")
+        self.net_agy_item = rumps.MenuItem(title="")
+        for item in (self.net_item, self.net_detail_item, self.net_agy_item):
+            self.menu.add(item)
+        self.menu.add(rumps.separator)
+
         # 初始化四筆配額資訊項目
         self.quota_items = [rumps.MenuItem(title="載入中...") for _ in range(4)]
         for item in self.quota_items:
+            self.menu.add(item)
+
+        # 2026-09-10：生圖（獨立配額）與 G1 credits
+        self.cached_extra: dict = {}
+        self.menu.add(rumps.separator)
+        self.image_item = rumps.MenuItem(title="生圖　載入中...")
+        self.image_limit_item = rumps.MenuItem(title="")
+        self.credit_item = rumps.MenuItem(title="G1 credits　載入中...")
+        for item in (self.image_item, self.image_limit_item, self.credit_item):
             self.menu.add(item)
 
         self.menu.add(rumps.separator)
@@ -70,8 +95,33 @@ class AgyQuotaWidget(rumps.App):
         self.timer_fetch = rumps.Timer(self.tick_fetch, 300)
         self.timer_fetch.start()
 
+        # 定時器 3：每 30 秒偵測一次網路區域（只看本機訊號，不連外）
+        self.timer_zone = rumps.Timer(self.tick_zone, 30)
+        self.timer_zone.start()
+
         # 啟動時立即於背景更新一次
         self.start_fetch_thread()
+
+    def _refresh_zone(self) -> dict:
+        """重新判斷網路區域；區域或可用狀態改變時舉旗更新 UI。"""
+        if agy_guard is None:
+            return {}
+        try:
+            z = agy_guard.network_zone()
+        except Exception as e:
+            z = {"id": "unknown", "name": f"判斷失敗（{type(e).__name__}）", "short": "?", "why": "", "blocked": None}
+        old = self.zone
+        self.zone = z
+        key = lambda d: (d.get("id"), d.get("ip"), bool(d.get("blocked")), d.get("bridge"))
+        if not old or key(old) != key(z):
+            self.needs_ui_update = True
+            # 從封鎖網路回到可用網路（例如放學回家）：馬上重新查一次額度
+            if old and old.get("blocked") and not z.get("blocked"):
+                self.start_fetch_thread()
+        return z
+
+    def tick_zone(self, _):
+        threading.Thread(target=self._refresh_zone, daemon=True).start()
 
     def start_fetch_thread(self):
         """啟動背景工作執行緒，避免阻塞選單列主執行緒。"""
@@ -83,6 +133,32 @@ class AgyQuotaWidget(rumps.App):
 
     def _fetch_quota_worker(self):
         """背景擷取配額資料，並妥善處理所有例外以確保不會崩潰。"""
+        # 封鎖網路（封鎖網域或黑名單）：完全不啟動 agy，保留上次資料並標註暫停。
+        zone = self._refresh_zone()
+        if zone.get("blocked"):
+            self.quota_meta = {"paused": True, "error": f"{zone.get('name', '封鎖網路')}，暫停查詢（不嘗試連線）",
+                               "from_cache": False, "fetched_at": None}
+            # 還沒有資料（例如在學校剛開機）：讀 agy_meter 的額度快取檔，不啟動 agy
+            try:
+                if agy_meter is not None:
+                    import json
+                    cache = json.loads(agy_meter.QUOTA_CACHE_PATH.read_text(encoding="utf-8"))
+                    self.quota_meta["fetched_at"] = datetime.fromisoformat(cache["fetched_at"])
+                    if not self.cached_data:
+                        self.cached_data = [
+                            {**b, "reset_time": datetime.fromisoformat(b["reset_time"]) if b.get("reset_time") else None}
+                            for b in cache.get("buckets", [])]
+            except Exception:
+                pass
+            try:
+                if agy_meter is not None:   # 生圖統計是掃本機檔案，不碰 agy
+                    self.cached_extra = {**(self.cached_extra or {}),
+                                         "image": agy_meter.image_quota(), "images": agy_meter.images()}
+            except Exception:
+                pass
+            self.needs_ui_update = True
+            return
+
         with self.fetch_lock:
             self.is_fetching = True
             try:
@@ -90,10 +166,23 @@ class AgyQuotaWidget(rumps.App):
                     data = []
                 else:
                     data = agy_meter.quota() or []
-            except Exception:
+                    self.quota_meta = dict(agy_meter.QUOTA_LAST)
+            except Exception as e:
                 data = []
+                self.quota_meta = {"error": f"小工具例外（{type(e).__name__}）", "from_cache": False, "fetched_at": None}
             finally:
                 self.is_fetching = False
+
+        # 生圖狀態（掃 brain 目錄＋429 事件，不耗配額）與 G1 credits（slash 指令，不耗 token）
+        extra = {}
+        try:
+            if agy_meter is not None:
+                extra = {"image": agy_meter.image_quota(), "images": agy_meter.images(),
+                         "credits": agy_meter.credits()}
+                agy_meter.log_extra_sample(extra["image"], extra["credits"])
+        except Exception:
+            extra = {}
+        self.cached_extra = extra
 
         # 每次抓到新資料就追加一筆時序樣本（5 分鐘一次）。
         # 額度百分比是瞬時值，不當場記下來事後就補不回來了。
@@ -125,15 +214,49 @@ class AgyQuotaWidget(rumps.App):
         minutes = total_minutes % 60
         return f"{hours}h{minutes:02d}m 後重置"
 
+    def _render_zone(self):
+        """選單最上面三行：所在區域、IP／閘道／網域、Antigravity 是否可用。"""
+        z = self.zone or {}
+        if not z:
+            self.net_item.title = "網路　偵測中..." if agy_guard else "網路　無法判斷（找不到 agy_guard）"
+            self.net_detail_item.title = ""
+            self.net_agy_item.title = ""
+            return
+        why = f"（依 {z['why']}）" if z.get("why") else ""
+        cable = "　雷電線已接" if z.get("bridge") else ""
+        self.net_item.title = f"網路：{z.get('name', '?')}{why}{cable}"
+        dom = "、".join(z.get("domains") or []) or "無"
+        self.net_detail_item.title = f"　IP {z.get('ip') or '—'}　閘道 {z.get('gw') or '—'}　網域 {dom}"
+        self.net_agy_item.title = ("　Antigravity：🚫 停用（此網路不嘗試連線，額度暫停查詢）"
+                                   if z.get("blocked") else "　Antigravity：✅ 可用")
+
     def update_ui(self):
-        """更新選單列標題與選單項目文字。"""
+        """更新選單列標題與選單項目文字：網路區域＋額度。"""
+        self._render_zone()
+        self._update_quota_ui()
+        z = self.zone or {}
+        tag = z.get("short") or ""
+        if z.get("blocked"):
+            self.title = f"{tag} ⛔" if tag else "⛔"
+            if self.cached_data:
+                ts = (self.quota_meta or {}).get("fetched_at")
+                when = f"（{ts:%m/%d %H:%M} 查詢）" if ts else ""
+                self.quota_items[0].title += f"　⏸ 暫停查詢，以下為上次資料{when}"
+        elif tag:
+            self.title = f"{tag} {self.title}"
+
+    def _update_quota_ui(self):
+        """更新額度相關的標題與選單項目文字。"""
         data = self.cached_data
 
         # 降級狀態：取不到資料或為空 list
+        meta = self.quota_meta or {}
         if not data:
+            reason = meta.get("error") or "尚未取得"
             self.title = "◈ --"
-            self.quota_items[0].title = "取不到額度（agy 未登入？）"
-            for i in range(1, 4):
+            self.quota_items[0].title = f"取不到額度：{reason}"
+            self.quota_items[1].title = "　（未登入時才會寫「未登入」；逾時或暫時錯誤請按立即重新整理）"
+            for i in range(2, 4):
                 self.quota_items[i].title = "—"
             return
 
@@ -147,9 +270,18 @@ class AgyQuotaWidget(rumps.App):
         g_pct = int(round(g_item["remaining_fraction"] * 100)) if g_item and "remaining_fraction" in g_item else None
         c_pct = int(round(c_item["remaining_fraction"] * 100)) if c_item and "remaining_fraction" in c_item else None
 
+        iq = (self.cached_extra or {}).get("image") or {}
+        img_tag = ""
+        if iq:
+            if iq.get("exhausted"):
+                img_tag = " 圖⛔"
+            elif iq.get("estimated_remaining") is not None:
+                img_tag = f" 圖{iq['estimated_remaining']}"
+            else:
+                img_tag = f" 圖{iq.get('used_in_window', 0)}用"
         if g_pct is not None and c_pct is not None:
-            prefix = "⚠︎" if (g_pct < 25 or c_pct < 25) else "◈"
-            self.title = f"{prefix} G{g_pct} C{c_pct}"
+            prefix = "⚠︎" if (g_pct < 25 or c_pct < 25 or iq.get("exhausted")) else "◈"
+            self.title = f"{prefix} G{g_pct} C{c_pct}{img_tag}"
         else:
             self.title = "◈ --"
 
@@ -168,6 +300,27 @@ class AgyQuotaWidget(rumps.App):
                 )
             else:
                 self.quota_items[idx].title = f"{config['name']} · {config['window']}　無資料"
+        if meta.get("from_cache") and meta.get("fetched_at"):
+            age = int((datetime.now().astimezone() - meta["fetched_at"]).total_seconds() // 60)
+            self.quota_items[0].title += f"　⟲ {age} 分鐘前資料（本次{meta.get('error') or '查詢失敗'}）"
+            self.title = self.title.replace("◈", "◇", 1)
+
+        # 3. 生圖與 credits
+        ex = self.cached_extra or {}
+        iq, im, cr = ex.get("image") or {}, ex.get("images") or {}, ex.get("credits")
+        if iq:
+            cd = self._format_countdown(iq.get("window_reset")) if iq.get("window_reset") else "窗口未開始"
+            if iq.get("exhausted"):
+                self.image_item.title = f"生圖 · 已用完（本窗口 {iq.get('used_in_window', 0)} 張）　{cd}"
+            else:
+                rem = f"估計還能生 {iq['estimated_remaining']} 張" if iq.get("estimated_remaining") is not None else "剩餘未知"
+                self.image_item.title = f"生圖 · 本窗口 {iq.get('used_in_window', 0)} 張　{rem}　{cd}"
+            lim = f"約 {iq['estimated_limit']} 張／5小時" if iq.get("estimated_limit") else "尚未推估"
+            self.image_limit_item.title = f"　推估上限 {lim}｜近24小時 {im.get('last_24h', 0)} 張｜歷來 {im.get('total', 0)} 張"
+        else:
+            self.image_item.title = "生圖　無資料"
+            self.image_limit_item.title = ""
+        self.credit_item.title = f"G1 credits　剩 {cr['remaining_credits']}" if cr else "G1 credits　取不到"
 
     def tick_countdown(self, _):
         """主執行緒定時器：套用背景抓回的新資料，並每 30 秒重算一次倒數。"""
