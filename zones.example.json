@@ -1,0 +1,12 @@
+{
+  "_說明": "agy_guard 的地點設定範例。複製到 ~/.gemini/agy-guard/zones.json 後改成自己的值（那份不進 repo）。blocked_domains：DNS 搜尋網域符合就一律不啟動 agy（unblock 解不掉），適合會擋 Google 服務的學校或公司網路。zones：選單列顯示所在區域用，判斷順序 domains → gw_macs → gateways → subnets；網段很多的場域建議只用 domains 或 gw_macs。用 `scutil --dns` 看搜尋網域、`route -n get default` 看閘道、`arp -n <閘道>` 看閘道 MAC。",
+  "blocked_domains": {
+    "school.example.edu": "某校（校內網路會擋 Antigravity，一律不嘗試）"
+  },
+  "zones": [
+    {"id": "school", "name": "學校", "short": "校",
+     "domains": ["school.example.edu"], "gw_macs": ["aa:bb:cc:dd:ee:ff"]},
+    {"id": "home", "name": "家裡", "short": "家", "gateways": ["192.168.1.1"]},
+    {"id": "hotspot", "name": "手機熱點", "short": "熱點", "subnets": ["172.20.10."]}
+  ]
+}
