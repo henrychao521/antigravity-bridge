@@ -20,3 +20,14 @@ toc-pages*.json
 __pycache__/
 *.pyc
 .DS_Store
+
+# ── 本機設定與快取（2026-10-02）──
+blocked_subnets.local.json
+zones.json
+capabilities.json
+quota_cache.json
+image_quota.json
+extra_history.csv
+*.bak
+*.bak-*
+*.bak_*

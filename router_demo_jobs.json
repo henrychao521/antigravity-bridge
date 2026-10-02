@@ -1,0 +1,79 @@
+{
+ "out_dir": "/tmp/router_demo",
+ "jobs": [
+  {
+   "name": "wiring_photo",
+   "kind": "photo_topology",
+   "prompt": "Wide 16:9 photo of a lemon battery wired to a meter...",
+   "size": [
+    1376,
+    768
+   ],
+   "control": "/path/flat.png",
+   "importance": 2
+  },
+  {
+   "name": "wiring_nocontrol",
+   "kind": "photo_topology",
+   "prompt": "Wide 16:9 photo of two lemons in series...",
+   "size": [
+    1376,
+    768
+   ],
+   "importance": 1
+  },
+  {
+   "name": "flow_zh",
+   "kind": "diagram_text",
+   "prompt": "flowchart with Chinese labels",
+   "mermaid": "flow.mmd",
+   "importance": 1
+  },
+  {
+   "name": "icons",
+   "kind": "icon_set",
+   "prompt": "Square 3x3 icon grid...",
+   "importance": 3
+  },
+  {
+   "name": "slide_bg",
+   "kind": "background",
+   "prompt": "Wide 16:9 slide background...",
+   "size": [
+    1376,
+    768
+   ],
+   "importance": 3
+  },
+  {
+   "name": "cover",
+   "kind": "cover",
+   "prompt": "Wide 16:9 report cover...",
+   "size": [
+    1376,
+    768
+   ],
+   "importance": 2
+  },
+  {
+   "name": "bar_chart",
+   "kind": "chart",
+   "prompt": "energy bar chart",
+   "importance": 1
+  },
+  {
+   "name": "mindmap_edit",
+   "kind": "diagram_text",
+   "prompt": "mind map that the editor will revise",
+   "importance": 1,
+   "editable": true,
+   "mermaid": "mm.mmd"
+  },
+  {
+   "name": "sprite_photo",
+   "kind": "photo_object",
+   "prompt": "isolated hair dryer photo",
+   "importance": 2
+  }
+ ]
+}

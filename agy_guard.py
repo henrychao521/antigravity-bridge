@@ -277,6 +277,20 @@ if __name__ == "__main__":
                 txt = open(sys.argv[2], errors="ignore").read()[-8000:]
             except Exception:
                 pass
+        # 2026-10-01：登入失效（Authentication required）和網路無關，換到哪個網路都一樣會失敗；
+        # 以前把它當網路問題，導致家裡網路被誤列黑名單。改成不封鎖網路、通知使用者重新登入（每 6 小時最多一次）。
+        if re.search(r"Authentication required|Please visit the URL to log in", txt, re.I):
+            mark = GUARD / "auth_required.flag"
+            import time
+            if not mark.exists() or time.time() - mark.stat().st_mtime > 6 * 3600:
+                mark.write_text(time.strftime("%Y-%m-%d %H:%M:%S"))
+                notifier = Path.home() / ".local/bin/report-notify"
+                if notifier.exists():
+                    subprocess.run([str(notifier), "--tag", "Antigravity", "--title", "Antigravity 登入失效",
+                                    "--text", "agy 回報 Authentication required：登入已過期，和網路無關。請在 MBP 終端機執行 agy 依提示重新登入 Google 帳號；登入前所有派工會失敗。"],
+                                   capture_output=True, timeout=60)
+            print("⚠️ Antigravity 登入已失效（和網路無關，不封鎖這個網路）。請在終端機執行 agy 重新登入。")
+            sys.exit(0)
         if looks_like_network_failure(txt):
             record_failure("自動記錄：呼叫失敗且訊息像網路/認證問題", fp)
             # 只有 token 檔不見或空掉才還原備份：2026-09-16 每次失敗都把 09-13 的舊備份蓋回去，

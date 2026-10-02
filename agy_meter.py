@@ -4,93 +4,104 @@
 僅使用 Python 3.12 標準函式庫，適用於多平台整合用量報表。
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import re
 import subprocess
+import time
+
+
+QUOTA_CACHE_PATH = Path(__file__).resolve().parent / "quota_cache.json"
+QUOTA_LAST: dict = {"error": None, "from_cache": False, "fetched_at": None}
+
+
+def _parse_usage(stdout: str) -> list[dict]:
+    start_idx, end_idx = stdout.find("{"), stdout.rfind("}")
+    if start_idx == -1 or end_idx == -1 or start_idx > end_idx:
+        return []
+    data = json.loads(stdout[start_idx: end_idx + 1])
+    groups = data.get("command", {}).get("data", {}).get("groups", [])
+    if not isinstance(groups, list):
+        return []
+    results: list[dict] = []
+    for g in groups:
+        group_name = g.get("group") or g.get("name") or "unknown"
+        buckets = g.get("buckets") or g.get("limits") or [g]
+        if not isinstance(buckets, list):
+            buckets = [buckets]
+        for b in buckets:
+            try:
+                rem_frac = float(b.get("remaining_fraction", 0.0))
+            except (ValueError, TypeError):
+                rem_frac = 0.0
+            reset_raw = b.get("reset_time")
+            reset_dt: datetime | None = None
+            if isinstance(reset_raw, str) and reset_raw:
+                try:
+                    reset_dt = datetime.fromisoformat(reset_raw.strip().replace("Z", "+00:00"))
+                except ValueError:
+                    reset_dt = None
+            elif isinstance(reset_raw, (int, float)):
+                reset_dt = datetime.fromtimestamp(reset_raw, tz=timezone.utc)
+            results.append({"group": g.get("group", group_name), "bucket_id": b.get("bucket_id", b.get("id", "")),
+                            "window": b.get("window", ""), "remaining_fraction": rem_frac,
+                            "reset_time": reset_dt, "used_pct": round((1.0 - rem_frac) * 100, 2)})
+    return results
+
+
+def _classify_failure(returncode, stdout: str, stderr: str) -> str:
+    text = f"{stdout}\n{stderr}".lower()
+    if any(k in text for k in ("not logged in", "not signed in", "please log in", "please sign in", "unauthenticated",
+                               "login required", "invalid_grant", "reauth")):
+        return "未登入"
+    if "eligibility check failed" in text or "connection reset" in text or "network" in text:
+        return "網路或服務暫時錯誤"
+    return f"查詢失敗（exit {returncode}）" if returncode not in (0, None) else "回應無法解析"
 
 
 def quota() -> list[dict]:
     """取得 Antigravity 當前配額狀態。
 
-    透過執行 `~/.local/bin/agy -p "/usage" --output-format json` 取得配額資訊。
-    若執行失敗、逾時或檔案不存在，皆安全回傳空串列，不拋出例外。
-
-    Returns:
-        list[dict]: 攤平後的配額清單，每筆包含 group, bucket_id, window,
-                    remaining_fraction, reset_time, used_pct 等欄位。
+    透過 `agy -p "/usage" --output-format json` 取得。2026-09-10 修正：
+    以前任何失敗都回空串列，小工具就一律顯示「agy 未登入？」——實際上多半是逾時或暫時錯誤。
+    現在失敗會重試一次，並把原因寫進 QUOTA_LAST["error"]（未安裝／逾時／未登入／網路／查詢失敗）；
+    兩次都失敗時回傳上一次成功的快取（QUOTA_LAST["from_cache"]=True、fetched_at＝當時時間）。
     """
     agy_bin = Path.home() / ".local" / "bin" / "agy"
+    QUOTA_LAST.update({"error": None, "from_cache": False})
     if not agy_bin.exists():
+        QUOTA_LAST["error"] = "agy 未安裝"
         return []
-
-    try:
-        proc = subprocess.run(
-            [str(agy_bin), "-p", "/usage", "--output-format", "json"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=True,
-        )
-        stdout = proc.stdout
-
-        # 尋找第一個 '{' 與最後一個 '}'，過濾可能夾雜的警告文字
-        start_idx = stdout.find("{")
-        end_idx = stdout.rfind("}")
-        if start_idx == -1 or end_idx == -1 or start_idx > end_idx:
-            return []
-
-        json_str = stdout[start_idx : end_idx + 1]
-        data = json.loads(json_str)
-
-        # 解析 command.data.groups
-        groups = data.get("command", {}).get("data", {}).get("groups", [])
-        if not isinstance(groups, list):
-            return []
-
-        results: list[dict] = []
-        for g in groups:
-            group_name = g.get("group") or g.get("name") or "unknown"
-            # 支援巢狀 buckets 或扁平結構
-            buckets = g.get("buckets") or g.get("limits") or [g]
-            if not isinstance(buckets, list):
-                buckets = [buckets]
-
-            for b in buckets:
+    err = None
+    for attempt in range(2):
+        try:
+            proc = subprocess.run([str(agy_bin), "-p", "/usage", "--output-format", "json"],
+                                  capture_output=True, text=True, timeout=90)
+            results = _parse_usage(proc.stdout) if proc.returncode == 0 else []
+            if results:
+                now = datetime.now().astimezone()
+                QUOTA_LAST.update({"error": None, "fetched_at": now})
                 try:
-                    rem_frac = float(b.get("remaining_fraction", 0.0))
-                except (ValueError, TypeError):
-                    rem_frac = 0.0
-
-                # 解析 ISO 重設時間，處理結尾 'Z' (轉為 +00:00)
-                reset_raw = b.get("reset_time")
-                reset_dt: datetime | None = None
-                if isinstance(reset_raw, str) and reset_raw:
-                    clean_ts = reset_raw.rstrip()
-                    if clean_ts.endswith("Z"):
-                        clean_ts = clean_ts[:-1] + "+00:00"
-                    try:
-                        reset_dt = datetime.fromisoformat(clean_ts)
-                    except ValueError:
-                        reset_dt = None
-                elif isinstance(reset_raw, (int, float)):
-                    reset_dt = datetime.fromtimestamp(reset_raw, tz=timezone.utc)
-
-                used_pct = round((1.0 - rem_frac) * 100, 2)
-
-                results.append(
-                    {
-                        "group": g.get("group", group_name),
-                        "bucket_id": b.get("bucket_id", b.get("id", "")),
-                        "window": b.get("window", ""),
-                        "remaining_fraction": rem_frac,
-                        "reset_time": reset_dt,
-                        "used_pct": used_pct,
-                    }
-                )
-
-        return results
+                    QUOTA_CACHE_PATH.write_text(json.dumps({"fetched_at": now.isoformat(), "buckets": [
+                        {**r, "reset_time": r["reset_time"].isoformat() if r["reset_time"] else None} for r in results]},
+                        ensure_ascii=False), encoding="utf-8")
+                except OSError:
+                    pass
+                return results
+            err = _classify_failure(proc.returncode, proc.stdout, proc.stderr)
+        except subprocess.TimeoutExpired:
+            err = "查詢逾時（90 秒）"
+        except Exception as e:
+            err = f"查詢失敗（{type(e).__name__}）"
+        if attempt == 0:
+            time.sleep(5)
+    QUOTA_LAST["error"] = err
+    try:
+        cache = json.loads(QUOTA_CACHE_PATH.read_text(encoding="utf-8"))
+        QUOTA_LAST.update({"from_cache": True, "fetched_at": datetime.fromisoformat(cache["fetched_at"])})
+        return [{**b, "reset_time": datetime.fromisoformat(b["reset_time"]) if b.get("reset_time") else None}
+                for b in cache.get("buckets", [])]
     except Exception:
         return []
 
@@ -235,17 +246,25 @@ def log_quota_sample(buckets: list[dict] | None = None) -> bool:
 
 def run(prompt: str, model: str | None = None, schema: str | None = None,
         timeout: int = 600, measure_quota: bool = True,
-        conversation: str | None = None, note: str = "") -> dict:
+        conversation: str | None = None, note: str = "",
+        print_timeout: str | None = None) -> dict:
     """呼叫 agy 並把用量記進 ledger.jsonl。所有派工都應該走這裡。
 
     measure_quota=True 時，呼叫前後各拍一次額度快照（查詢本身 0 token），
     據此算出「這一次呼叫吃掉幾 % 配額」——這是推估剩餘可用次數的唯一可靠依據。
     """
+    blocked = network_note()
+    if blocked:
+        return {"status": "NETWORK_BLOCKED", "error": blocked, "response": ""}
     agy_bin = Path.home() / ".local" / "bin" / "agy"
     before = _quota_map() if measure_quota else {}
     started = datetime.now().astimezone()
 
     cmd = [str(agy_bin), "-p", prompt, "--output-format", "json"]
+    # ⚠️ agy 的 --print-timeout 預設只有 5 分鐘,超過會回 status: ERROR、
+    #    **回應是空的但工作已經做掉了**(規範第五節第 4 條;實測燒掉 140k tokens 拿不到輸出)。
+    #    這裡預設與本地 timeout 對齊,長任務(尤其會呼叫 MCP 工具的)不再白燒。
+    cmd += ["--print-timeout", print_timeout or f"{max(1, int(timeout // 60))}m"]
     if model:
         cmd += ["--model", model]
     if schema:
@@ -398,3 +417,359 @@ if __name__ == "__main__":
             )
             print(f"    - 重設時間: {reset_text}")
     print("=" * 65)
+
+
+# ── 工具模式（2026-08-31 實測後新增）────────────────────────────────────────
+# headless 下 Antigravity **是有工具的**（view_file / run_command / write_to_file /
+# read_url_content / search_web / grep_search / browser_*）。
+# 之前以為「純文字進出」，其實是因為：
+#   1. 工具呼叫要通過 ~/.gemini/antigravity-cli/settings.json 的 permissions.allow，
+#      比對的是**指令名稱**，完整路徑不匹配 command(python) 這種寫法；
+#   2. 碰到工作區外的路徑要看 trustedWorkspaces；
+#   3. **工具呼叫一旦被拒，該回合直接結束、response 是空字串**——
+#      看起來像「沒有工具」，其實是權限沒開。
+# 用 --output-format stream-json 才看得到工具呼叫與其輸出。
+
+# 已知會封鎖 Antigravity 的網路。實測在某些學校網路下，
+# agy 對 daily-cloudcode-pa.googleapis.com 的 eligibility check 會被中斷
+# （connection reset by peer），而且失敗的 token 刷新會讓登入狀態失效。
+# 在這種網路下重試沒有意義，只會浪費時間並可能弄壞登入。
+# 清單放在本機的 blocked_subnets.local.json（不上傳），格式：{"10.20.30.": "說明"}
+def _load_blocked_subnets() -> dict:
+    try:
+        return json.loads((Path(__file__).with_name("blocked_subnets.local.json")).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+BLOCKED_SUBNETS = _load_blocked_subnets()
+
+
+def network_note() -> str | None:
+    """若目前在已知會封鎖的網路，回傳說明字串；否則 None。
+
+    兩層：agy_guard 的**自學黑名單**（閘道 MAC 指紋，會隨失敗自己長大）優先，
+    再退回 BLOCKED_SUBNETS 這份寫死的清單。
+    改成自學是因為實測同一所學校至少有兩個網段（一個失敗、一個正常），
+    寫死一定會漏，而漏掉的代價是又一次壞掉的登入。
+    """
+    try:
+        import agy_guard
+        b = agy_guard.blocked()
+        if b:
+            return b
+    except Exception:
+        pass
+    try:
+        import socket
+        s_ = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s_.settimeout(0.5)
+        s_.connect(("8.8.8.8", 80))
+        ip = s_.getsockname()[0]
+        s_.close()
+    except Exception:
+        return None
+    for prefix, why in BLOCKED_SUBNETS.items():
+        if ip.startswith(prefix):
+            return f"目前位於 {ip}——{why}。派工會失敗，先換網路再試，不要反覆重試。"
+    return None
+
+
+def run_with_tools(prompt: str, model: str | None = None, timeout: int = 900,
+                   note: str = "", print_timeout: str | None = None) -> dict:
+    """允許 Antigravity 使用工具的派工，回傳含工具呼叫軌跡。
+
+    **不要用在會吃進不可信內容的任務上**（例如把新聞餵進去分析）：
+    允許清單裡有 write_file(*)，新聞標題裡的注入指令可能觸發寫檔。
+    只用在提示內容完全由自己掌控的任務：查證、跑測試、產生程式碼後自我驗證。
+    """
+    blocked = network_note()
+    if blocked:
+        return {"status": "NETWORK_BLOCKED", "error": blocked, "response": "", "steps": [], "denied": []}
+    agy_bin = Path.home() / ".local" / "bin" / "agy"
+    cmd = [str(agy_bin), "-p", prompt, "--output-format", "stream-json"]
+    # 與 run() 一致：放寬 agy 自己的 --print-timeout（預設 5 分鐘，超過回空但工作已做掉）。
+    # 2026-09-10 補上：批次 generate_image 一輪常超過 5 分鐘。
+    cmd += ["--print-timeout", print_timeout or f"{max(1, int(timeout // 60))}m"]
+    if model:
+        cmd += ["--model", model]
+    started = datetime.now().astimezone()
+    steps, result = [], {}
+    # Google 端的 eligibility check 偶爾會 connection reset（實測 2026-08-31），
+    # 那是基礎設施的暫時性錯誤，值得重試一次再放棄。
+    attempts = 0
+    try:
+        while True:
+            attempts += 1
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            out_ = proc.stdout or ""
+            # 網路被擋時重試無用，而且失敗的 token 刷新可能弄壞登入狀態
+            if "Eligibility check failed" in out_ and network_note():
+                break
+            if "Eligibility check failed" not in out_ or attempts >= 3:
+                break
+            time.sleep(4 * attempts)
+        for line in proc.stdout.splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            su = e.get("step_update") or {}
+            if su.get("step_type") == "tool":
+                ti = su.get("tool_info") or {}
+                steps.append({"tool": su.get("tool_name"), "state": su.get("state"),
+                              "params": ti.get("parameters"),
+                              "output": (ti.get("output") or "")[:4000],
+                              "error": (ti.get("error") or {}).get("message")})
+            if e.get("event") == "result":
+                result = e.get("result") or {}
+    except Exception as e:
+        result = {"status": "LOCAL_ERROR", "error": str(e)}
+
+    denied = [s for s in steps if s.get("error") and "permission" in str(s["error"]).lower()]
+    signals = _record_tool_signals(steps)
+    entry = {"ts": started.isoformat(), "model": model or "(default)",
+             "status": result.get("status"), "conversation_id": result.get("conversation_id"),
+             "duration_seconds": result.get("duration_seconds"),
+             "usage": result.get("usage", {}), "quota_delta_pct": {},
+             "prompt_chars": len(prompt), "note": note or "run_with_tools",
+             "tool_calls": len(steps), "tool_denied": len(denied),
+             "tools_used": signals["tools_used"], "image_ok": signals["image_ok"],
+             "image_err": signals["image_err"],
+             "response": result.get("response") or ""}
+    slim = {k: v for k, v in entry.items() if k != "response"}
+    slim["resp_chars"] = len(entry["response"])
+    with LEDGER.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(slim, ensure_ascii=False) + "\n")
+    return {**result, "response": entry["response"], "steps": steps,
+            "denied": [d["params"] for d in denied]}
+
+
+# ═══════════════ 2026-09-10 擴充：生圖數量、G1 credits、能力盤點 ═══════════════
+# /usage 只回報「Gemini」「Claude/GPT」兩組文字模型配額；生圖（gemini-3.1-flash-image）
+# 有獨立的小配額，但 CLI 完全不揭露——只有用完時 429 錯誤的 metadata 會寫出重置時間。
+# 所以這裡用三個來源拼出生圖狀態：
+#   ① brain 目錄裡實際產出的圖檔（真實張數，含互動模式）
+#   ② run_with_tools() 捕捉到的 429 事件（重置時間）
+#   ③ 由 ①② 回推的「每個窗口大約可生幾張」
+BRAIN = Path.home() / ".gemini" / "antigravity-cli" / "brain"
+IMAGE_STATE = BASE / "image_quota.json"
+CAPS_CACHE = BASE / "capabilities.json"
+EXTRA_CSV = BASE / "extra_history.csv"
+IMAGE_WINDOW_H = 5
+_IMG_RE = re.compile(r"_\d{13}\.(?:jpe?g|png|webp)$", re.I)
+_RESET_RE = re.compile(r'"quotaResetTimeStamp"\s*:\s*"([^"]+)"')
+_MODEL_RE = re.compile(r'"model"\s*:\s*"([^"]+)"')
+
+
+def _iso(v):
+    if isinstance(v, datetime):
+        return v if v.tzinfo else v.astimezone()
+    if not v:
+        return None
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return None
+
+
+def _slash(cmd: str, timeout: int = 60) -> dict:
+    """執行 agy 的 slash 指令（/usage、/credits、/skills、/agents），不耗 token。"""
+    agy_bin = Path.home() / ".local" / "bin" / "agy"
+    try:
+        out = subprocess.run([str(agy_bin), "-p", cmd, "--output-format", "json"],
+                             capture_output=True, text=True, timeout=timeout).stdout
+        return json.loads(out[out.index("{"): out.rindex("}") + 1])
+    except Exception:
+        return {}
+
+
+def credits() -> dict | None:
+    """G1 credits（配額用完後的加購點數）。回傳 {'remaining_credits': int, 'upgrade_uri': str}。"""
+    for attempt in range(2):                      # 偶發取不到（2026-09-10 報表一次落空、隨後 5/5 成功），重試一次
+        d = (_slash("/credits").get("command") or {}).get("data")
+        if isinstance(d, dict) and "remaining_credits" in d:
+            return d
+        time.sleep(2)
+    return None
+
+
+def _image_files() -> list[tuple[float, Path]]:
+    if not BRAIN.exists():
+        return []
+    out = []
+    for f in BRAIN.glob("*/*"):
+        if f.is_file() and _IMG_RE.search(f.name):
+            try:
+                out.append((f.stat().st_mtime, f))
+            except OSError:
+                pass
+    return sorted(out)
+
+
+def images(now: datetime | None = None) -> dict:
+    """Antigravity 實際生成的圖片張數（依 brain 目錄檔案時間）。"""
+    now = now or datetime.now().astimezone()
+    t = now.timestamp()
+    files = _image_files()
+    def n(hours):
+        return sum(1 for m, _ in files if t - m <= hours * 3600)
+    return {"total": len(files), "last_5h": n(5), "last_24h": n(24), "last_7d": n(24 * 7),
+            "last_image_at": datetime.fromtimestamp(files[-1][0]).astimezone() if files else None,
+            "conversations": len({f.parent.name for _, f in files})}
+
+
+def _load_image_state() -> dict:
+    try:
+        return json.loads(IMAGE_STATE.read_text(encoding="utf-8"))
+    except Exception:
+        return {"events": []}
+
+
+def record_image_exhausted(detected_at, reset_time, model: str = "", source: str = "") -> dict | None:
+    """記一筆「生圖配額用完」事件，並回推這個窗口實際生了幾張（＝推估上限）。"""
+    det, rst = _iso(detected_at), _iso(reset_time)
+    if not det or not rst:
+        return None
+    st = _load_image_state()
+    if any(e.get("reset_time") == rst.isoformat() for e in st["events"]):
+        return None                                    # 同一個窗口只記一次
+    win_start = (rst - timedelta(hours=IMAGE_WINDOW_H)).timestamp()
+    used = sum(1 for m, _ in _image_files() if win_start <= m <= det.timestamp() + 60)
+    ev = {"detected_at": det.isoformat(), "reset_time": rst.isoformat(), "model": model,
+          "images_in_window": used, "source": source}
+    st["events"].append(ev)
+    try:
+        IMAGE_STATE.write_text(json.dumps(st, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return ev
+
+
+def image_quota(now: datetime | None = None) -> dict:
+    """生圖配額狀態（推估）。exhausted＝目前仍在 429 的窗口內。"""
+    now = now or datetime.now().astimezone()
+    st = _load_image_state()
+    evs = st.get("events", [])
+    ests = sorted(e["images_in_window"] for e in evs if e.get("images_in_window"))
+    est_limit = ests[len(ests) // 2] if ests else None      # 取中位數
+    last = evs[-1] if evs else None
+    reset = _iso(last["reset_time"]) if last else None
+    exhausted = bool(reset and now < reset)
+    files = _image_files()
+    if exhausted:
+        start = reset - timedelta(hours=IMAGE_WINDOW_H)
+    else:
+        # 窗口從「上次重置後的第一張圖」起算 5 小時
+        after = [m for m, _ in files if (not reset or m >= reset.timestamp()) and now.timestamp() - m <= IMAGE_WINDOW_H * 3600]
+        start = datetime.fromtimestamp(after[0]).astimezone() if after else None
+    used = sum(1 for m, _ in files if start and m >= start.timestamp()) if start else 0
+    window_reset = reset if exhausted else (start + timedelta(hours=IMAGE_WINDOW_H) if start else None)
+    return {"model": (last or {}).get("model") or "gemini-3.1-flash-image", "exhausted": exhausted,
+            "used_in_window": used, "estimated_limit": est_limit,
+            "estimated_remaining": (max(est_limit - used, 0) if est_limit is not None and not exhausted else (0 if exhausted else None)),
+            "window_reset": window_reset, "samples": len(ests), "last_event": last}
+
+
+def _record_tool_signals(steps: list[dict]) -> dict:
+    """從一次 run_with_tools 的軌跡統計工具使用，並自動記下生圖 429。"""
+    used: dict[str, int] = {}
+    ok = err = 0
+    for st in steps or []:
+        if st.get("state") not in ("DONE", "ERROR"):
+            continue
+        tool = st.get("tool") or "?"
+        used[tool] = used.get(tool, 0) + 1
+        if tool == "generate_image":
+            if st["state"] == "DONE":
+                ok += 1
+            else:
+                err += 1
+                msg = str(st.get("error") or "")
+                if "RESOURCE_EXHAUSTED" in msg or "429" in msg:
+                    r, mm = _RESET_RE.search(msg), _MODEL_RE.search(msg)
+                    if r:
+                        record_image_exhausted(datetime.now().astimezone(), r.group(1),
+                                               mm.group(1) if mm else "", "run_with_tools")
+    return {"tools_used": used, "image_ok": ok, "image_err": err}
+
+
+def tool_usage(since: datetime | None = None) -> dict[str, int]:
+    """帳本裡各工具的使用次數（只涵蓋 run_with_tools 派工，2026-09-10 之後才有逐工具紀錄）。"""
+    out: dict[str, int] = {}
+    for e in ledger():
+        if since and _iso(e.get("ts")) and _iso(e["ts"]) < since:
+            continue
+        for k, v in (e.get("tools_used") or {}).items():
+            out[k] = out.get(k, 0) + v
+    return out
+
+
+def capabilities(max_age_hours: int = 24, refresh_tools: bool = False) -> dict:
+    """能力盤點（快取一天）：版本、模型、MCP、skills、agents、外掛、遠端控制。
+    refresh_tools=True 時另外發一次最便宜的呼叫，從 init 事件讀完整工具清單（會耗少量 Gemini 配額）。"""
+    try:
+        cache = json.loads(CAPS_CACHE.read_text(encoding="utf-8"))
+        age = datetime.now().astimezone() - _iso(cache["checked_at"])
+        if age < timedelta(hours=max_age_hours) and not refresh_tools:
+            return cache
+    except Exception:
+        cache = {}
+    agy_bin = str(Path.home() / ".local" / "bin" / "agy")
+    def run(args, t=60):
+        try:
+            return subprocess.run([agy_bin, *args], capture_output=True, text=True, timeout=t).stdout
+        except Exception:
+            return ""
+    models = [ln.split("\t", 1) for ln in run(["models"]).splitlines() if "\t" in ln]
+    mcp = [ln.split()[0] + ("" if "enabled" in ln else "（停用）") for ln in run(["mcp", "list"]).splitlines()[1:] if ln.strip()]
+    skills = [x["name"] for x in ((_slash("/skills").get("command") or {}).get("data") or {}).get("skills", [])]
+    agents = ((_slash("/agents").get("command") or {}).get("data") or {}).get("agents", [])
+    caps = {"checked_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "version": run(["--version"]).strip(),
+            "models": [{"id": a, "name": b} for a, b in models],
+            "mcp_servers": mcp, "skills": skills, "agents": agents,
+            "plugins": run(["plugin", "list"]).strip(),
+            "remote_control": (run(["remote-control", "status"]).splitlines() or [""])[0],
+            "tools": cache.get("tools", []), "tools_checked_at": cache.get("tools_checked_at")}
+    if refresh_tools:
+        try:
+            out = subprocess.run([agy_bin, "--model", "gemini-3.7-flash-low", "--output-format", "stream-json",
+                                  "-p=只回覆 OK"], capture_output=True, text=True, timeout=120).stdout
+            for line in out.splitlines():
+                m = re.search(r'"tools"\s*:\s*(\[[^\]]*\])', line)
+                if m:
+                    caps["tools"] = json.loads(m.group(1)); caps["tools_checked_at"] = caps["checked_at"]; break
+        except Exception:
+            pass
+    prev = {m["id"] for m in cache.get("models", [])}
+    caps["new_models"] = sorted({m["id"] for m in caps["models"]} - prev) if prev else []
+    try:
+        CAPS_CACHE.write_text(json.dumps(caps, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return caps
+
+
+def log_extra_sample(img: dict | None = None, cred: dict | None = None) -> bool:
+    """生圖與 credits 的時序樣本（和 quota_history.csv 分開，不動舊欄位）。"""
+    import csv
+    img = img or image_quota()
+    row = {"ts": datetime.now().astimezone().isoformat(timespec="seconds"),
+           "images_5h": images()["last_5h"], "image_used_in_window": img["used_in_window"],
+           "image_exhausted": int(img["exhausted"]),
+           "image_window_reset": img["window_reset"].isoformat() if img.get("window_reset") else "",
+           "g1_credits": (cred or {}).get("remaining_credits", "")}
+    new = not EXTRA_CSV.exists()
+    try:
+        with EXTRA_CSV.open("a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(row))
+            if new:
+                w.writeheader()
+            w.writerow(row)
+        return True
+    except OSError:
+        return False

@@ -121,6 +121,27 @@ quota_samples, claude_calls, claude_billable_tokens, claude_cache_read_tokens`
 ```
 並行問多個模型，輸出各自判定／理由／最易忽略前提，結論分歧會標出來。自動記帳。
 
+### image_router.py — 生圖自動調度
+```bash
+./image_router.py plan jobs.json          # 只排程
+./image_router.py run  jobs.json --urgent # 照排程生圖（急件：全部這次做完為先）
+```
+依 Antigravity `generate_image` 剩餘張數、每張圖的說明重要性與「改走備援的品質損失」，
+把每張圖分給 Antigravity、本機 mflux（FLUX.2／Z-Image）或程式繪製；結果與出處寫進 `_manifest.json`。
+Antigravity 只能生成**靜態圖**（7 種長寬比、最多 3 張參考圖），不能生成影片（2026-10-02 實測）。
+
+### agy-queue/agyq.py — 跨機工作佇列
+一台機器在會擋 Antigravity 的網路（例如學校）時，由它放工作、另一台在可用網路上主動領走執行：
+```bash
+agyq submit --title 標題 --task 任務.md --base 專案目錄 檔案...    # 多模型獨立審查
+agyq submit-image --title 標題 --jobs images.json --base 目錄       # 生圖需求（image_router 格式）
+agyq run                                                            # 執行端 launchd 每 10 分鐘
+agyq status
+```
+執行端在封鎖網路時什麼都不做；連線或登入失敗整批延後、不重試（避免失敗的 token 刷新弄壞登入）。
+生圖途中登入失效時，丟掉該輪本機補畫的圖、整件延後，不讓低品質備援被當成品送回。
+封鎖網段寫在本機的 `blocked_subnets.local.json`（不上傳），格式 `{"10.20.30.": "說明"}`。
+
 ### 計量模組
 - `agy_meter.py` — Antigravity 側。`quota()` 查剩餘（0 token）、`run()` 發話並記帳、
   `ledger()` 讀帳本、`calls()` 掃日誌（**只涵蓋 Anthropic 路徑，Gemini 呼叫日誌不寫用量**，僅供補漏）。
