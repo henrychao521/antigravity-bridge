@@ -27,6 +27,8 @@ jobs.json：
 其他：已存在的輸出直接跳過（--force 才重做，避免重複花額度）；額度推估不出來時照常送 Antigravity、遇 429 再改派；
       執行中遇到 429 剩下的自動改走備援、不重試；本機一次只跑一個 mflux（16GB）會等其他 mflux 結束（--no-wait 略過）；
       每張圖實際用的工具與出處寫進 _manifest.json。
+agy 1.2.16 起（2026-10-08）：生圖由 image-generator 子代理執行，父代理 steps 看不到 generate_image；
+      成功與否改看 agy_meter.brain_scan() 掃到的檔案，429 也從子代理軌跡抓；子代理多生的版本記在 extra_versions。
 """
 import concurrent.futures as cf, glob, json, os, shutil, subprocess, sys, tempfile, threading, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -164,37 +166,61 @@ def unique(p):
     return f"{b}_{time.strftime('%H%M%S')}{e}"
 
 
+SUB_RULE = ("Call generate_image exactly ONCE, with ImageName exactly as given and Prompt copied verbatim from below "
+            "(do not rewrite, expand or translate it). Do not review the result, do not retry, do not edit it, "
+            "do not make any other version (no _v2/_fixed names), even if the result looks imperfect. "
+            "After that single call, reply with the saved file path and stop.")
+
+
 def prompt_for(items):
-    lines = [f"請依序呼叫 generate_image 工具，每一項呼叫一次，共 {len(items)} 次。",
-             "規則：ImageName 參數用我給的名稱；Prompt 參數**逐字照抄**下面的英文提示詞，不要改寫、不要增刪。",
-             "除了 generate_image 之外不要使用任何其他工具。全部完成後只回覆一行：DONE", ""]
+    """agy 1.2.16 起父代理沒有 generate_image，只能交給 image-generator 子代理（規範第十一節 2026-10-08）。
+    兩種情況都寫清楚：有就自己呼叫；沒有就一次 invoke_subagent、一張一個子代理、不輪詢，並把 SUB_RULE 傳給子代理，
+    擋住子代理「檢查結果、最多重試三次」的預設行為（2026-10-08 一輪 11 張多生了 3 張、吃掉 13 張窗口）。"""
+    lines = [f"請替下面 {len(items)} 張圖各生成一張，規則：",
+             "1. 如果你自己的工具清單裡有 generate_image：直接自己呼叫，每張一次；不要使用 invoke_subagent、manage_subagents、schedule。",
+             f"2. 如果你沒有 generate_image：只呼叫一次 invoke_subagent，Subagents 陣列裡每張圖一個 TypeName=image-generator 的子代理，共 {len(items)} 個；"
+             "之後不要用 manage_subagents、schedule 或 manage_task 輪詢，子代理完成會自己傳訊息給你。",
+             "3. 每張圖只生成一次：ImageName 用我給的名稱，不要加 _v2、_fixed 等字尾；Prompt 參數**逐字照抄**英文提示詞，不要改寫、不要增刪。"
+             "生成後不要檢查、修圖、重生或另做版本，即使結果不完美也一樣。",
+             "4. 交給子代理時，每個子代理的 Prompt 依序放：下面這段英文規則（原封不動）、一行「ImageName: 名稱」、一行「Prompt:」、英文提示詞原文。",
+             "   " + SUB_RULE,
+             "全部完成後只回覆一行：DONE", ""]
     for j in items:
         lines += [f"### ImageName: {j['name']}", j["prompt"], ""]
     return "\n".join(lines)
 
 
 def run_agy(items, out_dir):
+    t0 = time.time()
     r = m.run_with_tools(prompt_for(items), model="gemini-3.7-flash-high", timeout=2700, print_timeout="40m",
                          note="image_router " + ",".join(j["name"] for j in items))
     conv = r.get("conversation_id") or ""
     final = {}
-    for s in r.get("steps", []):
+    for s in r.get("steps", []):       # 舊版 agy（≤1.2.15）父代理直接呼叫 generate_image 時才會有
         if s.get("tool") == "generate_image" and s.get("state") in ("DONE", "ERROR"):
             final[((s.get("params") or {}).get("ImageName") or "").lower()] = s     # 去重：只留最終狀態
-    done, hit, why = {}, None, {}
+    # 1.2.16 起圖由子代理生成：檔案與 429 都要掃 brain 目錄（不靠 steps、不靠 conversation_id）
+    scan = m.brain_scan([j["name"] for j in items], t0)
+    errs = [str(s.get("error") or "") for s in final.values() if s.get("state") == "ERROR"]
+    errs += [q["message"] for q in scan["quota_errors"]]
+    hit = next((e[:300] for e in errs if "429" in e or "RESOURCE_EXHAUSTED" in e), None)
+    done, why, extras = {}, {}, {}
     for j in items:
-        n = j["name"]; s = final.get(n.lower())
-        err = str((s or {}).get("error") or "")
-        if s and s["state"] == "ERROR" and ("429" in err or "RESOURCE_EXHAUSTED" in err):
-            hit = err[:300]; why[n] = "429 額度用完"; continue
-        if not s or s["state"] != "DONE":
-            why[n] = "沒有成功的 generate_image 呼叫" + (f"：{err[:120]}" if err else ""); continue
-        fs = sorted([f for f in glob.glob(os.path.join(BRAIN, conv, "*"))
-                     if os.path.basename(f).lower().startswith(n.lower() + "_")], key=os.path.getmtime)   # agy 會把檔名轉小寫
-        if not fs:
-            why[n] = "state=DONE 但找不到檔案"; continue
-        dst = unique(os.path.join(out_dir, n + os.path.splitext(fs[-1])[1])); shutil.copy2(fs[-1], dst); done[n] = dst
-    return done, hit, why, conv
+        n = j["name"]; s = final.get(n.lower()); f = scan["images"][n]
+        if f["extras"]:
+            extras[n] = f["extras"]
+        if not f["file"]:
+            err = str((s or {}).get("error") or "")
+            why[n] = ("429 額度用完" if hit else "找不到輸出檔（父代理與子代理都沒有產出）") + (f"：{err[:120]}" if err and not hit else "")
+            continue
+        src = f["file"]
+        dst = unique(os.path.join(out_dir, n + os.path.splitext(src)[1])); shutil.copy2(src, dst); done[n] = dst
+        if not f["exact"]:
+            why[n] = f"只找到子代理另做的版本 {os.path.basename(src)}"
+    if extras:
+        print(f"  ⚠ agy 自行多生了 {sum(map(len, extras.values()))} 張（吃生圖額度）："
+              + "、".join(f"{n}×{len(v)}" for n, v in extras.items()), flush=True)
+    return done, hit, why, conv, scan, extras
 
 
 def busy():
@@ -279,12 +305,16 @@ def main():
             print(f"  {j['name']}：{TOOL_NAME.get(tool, tool)} {'完成' if f else '未產出'}　{note}", flush=True)
 
     def do_agy(chunk):
-        done, hit, why, conv = run_agy(chunk, out_dir)
+        done, hit, why, conv, scan, extras = run_agy(chunk, out_dir)
         back = []
         for j in chunk:
             if j["name"] in done:
-                record(j["name"], {"tool": "agy", "file": done[j["name"]], "credit": CREDIT["agy"], "conversation": conv,
-                                   "must_check_wiring": j["kind"] == "photo_topology"})
+                n = j["name"]; calls = scan["calls"].get(n) or []
+                record(n, {"tool": "agy", "file": done[n], "credit": CREDIT["agy"], "conversation": conv,
+                           "source": scan["images"][n]["file"], "note": why.get(n),
+                           "prompt_verbatim": bool(calls) and calls[0].get("Prompt", "").strip() == j["prompt"].strip(),
+                           "extra_versions": extras.get(n, []),
+                           "must_check_wiring": j["kind"] == "photo_topology"})
                 print(f"  {j['name']}：Antigravity 完成", flush=True)
             else:
                 t, r = fallback(j, urgent); back.append((j, t, f"Antigravity 失敗（{why.get(j['name'])}）→ {r}"))

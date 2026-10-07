@@ -312,6 +312,27 @@ res = m.supervise(task, criteria, check,
 
 ### 工具事實（實測，不是推論）
 
+> **2026-10-08 更正（agy 1.3.1，官方 changelog 1.2.16 起）：父代理已經沒有 `generate_image`，生圖一律交給內建 `image-generator` 子代理。**
+> 下面凡是寫「看 `steps[]` 的 generate_image」「到 `brain/<conversation_id>/` 找檔」的舊做法，在 1.2.16 以後都會誤判成全部失敗。
+
+- **流程變成**：父代理呼叫 `invoke_subagent`（`TypeName: image-generator`，一張圖一個子代理），子代理才呼叫 `generate_image`，
+  完成後用 `send_message` 回報父代理；父代理有時還會自己用 `manage_subagents`／`schedule`／`manage_task` 輪詢。
+  父代理的思考紀錄明寫「工具清單裡沒有 generate_image」，所以**叫它「自己呼叫 generate_image、不要用子代理」做不到**，只能規範子代理怎麼做。
+  不輪詢也沒關係：`-p` 會等子代理的訊息回來才結束（5011a542 那批沒有輪詢，四張都等到了）。
+- **`run_with_tools()` 的 `steps[]` 看不到任何 `generate_image`**（父代理軌跡只有 invoke_subagent／schedule／manage_subagents），
+  帳本的 `image_ok`／`image_err` 也因此是 0。**子代理的 429 也不會出現在父代理的 steps**。
+- **檔案位置**：子代理把圖寫在**父對話**的目錄 `brain/<父 conversation_id>/<imagename>_<13 位時間戳>.jpg`；
+  子代理自己的對話是另一個 brain 目錄（只有 `.system_generated/logs/transcript_full.jsonl`，裡面才有 generate_image 的 `tool_calls[].args` 與 429 錯誤）。
+  父目錄底下 `.system_generated/subagents/<子代理 id>.json` 記著子代理清單。
+- **找檔改用 `agy_meter.brain_scan(names, since)`**：掃 since 之後有變動的所有 brain 目錄（深度 2），
+  取 `<name>_<時間戳>` 的最新一張；沒有原名才退而取 `<name>_` 開頭的其他版本；同時回傳子代理實際送出的參數與 429（並自動記進生圖配額狀態）。
+  `image_router.py` 與 `rc-car-materials/dispatch/gen_images.py` 已改用它（2026-10-08）。
+- **子代理會自作主張多生**（官方說明：子代理「檢查結果、最多重試三次」）。2026-10-08 一輪 11 張：`parking_bus` 生了兩次、
+  `r2_hand_device` 另做 `r2_hand_device_v2`（用 ImagePaths 修掉螢幕上的字）、`title_desk` 另做 `title_desk_fixed`（撞 429 失敗），
+  **11 張圖吃掉 13 張窗口**。→ 提示詞要明講「每張只生一次、不檢查、不重生、不另做版本」，並要求父代理把這段英文規則原封不動放進每個子代理的 Prompt（`image_router.SUB_RULE`）。
+- **子代理會改寫提示詞**：同一輪 11 張只有 3 張逐字照送，其餘被擴寫到 650～940 字元。逐字驗收要比對子代理軌跡裡的 `Prompt`（`brain_scan()["calls"]`），不是父代理的 steps。
+  AspectRatio 子代理會自己帶（11/11 都是 16:9）。
+
 - **實際模型是 `gemini-3.1-flash-image`**（429 錯誤的 metadata 寫的）。agy 被問時自稱「Imagen 3」——**是錯的**，不要引用它的自述。
 - ~~呼叫參數實際只有 `ImageName`、`Prompt` 兩個~~（**2026-09-18 更正**）：還有 **`ImagePaths`（最多 3 張絕對路徑，參考圖／編輯來源）** 與 **`AspectRatio`**（1:1、2:3、3:2、3:4、4:3、9:16、16:9）。之前以為沒有，是因為 `stream-json` 的 tool params **只列 ImageName／Prompt**；完整參數要讀 `~/.gemini/antigravity-cli/brain/<conv>/.system_generated/logs/transcript_full.jsonl` 的 `tool_calls[].args`。實測：包裝指令寫「ImagePaths 參數一定要帶」，它就會照傳；結果寬高跟著 AspectRatio 走（1376×768）。
 - **參考圖怎麼給（2026-09-18 rc-car 實測 5 張）**：給「程式畫的正確結構圖（無字）＋真實產品照」最有效；**不要把有瑕疵的舊圖當參考**——3 張全部連錯誤一起照抄構圖，改成只給結構圖後 3/3 通過。驅動器：`/Volumes/Work/rc-car-materials/dispatch/gen_ref.py`。
@@ -320,7 +341,8 @@ res = m.supervise(task, criteria, check,
 - 輸出位置：`~/.gemini/antigravity-cli/brain/<conversation_id>/<ImageName>_<時間戳>.jpg`。
   **檔名的 ImageName 會被轉成小寫**（2026-09-11 實測 `type_M1` → `type_m1_…`），找檔要不分大小寫，否則會誤判沒產出而重生。
   用 conversation_id＋ImageName 自己找檔、自己複製，不要叫它搬檔。
-- **全部失敗時它照樣回「DONE」**。成功與否只看 `steps[]` 裡該呼叫的 `state`（`DONE`／`ERROR`）與檔案是否存在。
+  （1.2.16 起是**父**對話的 id，但不要依賴它，改用 `brain_scan()`，見本節開頭的更正。）
+- **全部失敗時它照樣回「DONE」**。成功與否只看檔案是否存在（1.2.15 以前另看 `steps[]` 裡該呼叫的 `state`；1.2.16 起父代理的 steps 沒有 generate_image）。
 - `stream-json` 記錄的 `Prompt` 參數**超過約 512 字元會被截成「…」**，逐字比對只能比前 512 字。
   → 提示詞控制在 **500 字元內**，最關鍵的物理細節寫在前面。
 
@@ -356,7 +378,8 @@ res = m.supervise(task, criteria, check,
 
 1. **英文提示詞**（要出現在圖上的中文標籤用引號夾在英文提示裡），結尾固定加：`Generic unbranded objects. Absolutely no text, no letters, no numbers, no labels, no logos, no watermark.`
    實測不加會自動長出品牌字（電表上的 FLUKE）與書名；2026-09-11 又見到提示「No text」仍冒出英文標籤（LEMON、COIL）與磁鐵 N／S，無字圖要逐張檢查。唯一例外是刻意要的短數字（如電表 LCD 的 `0.93`），要明講「除此之外不要有字」。
-2. 提示裡明講「Prompt 參數**逐字照抄**，不要改寫」，驗收時比對 `steps[].params.Prompt` 與原文（前 512 字元）相同。
+2. 提示裡明講「Prompt 參數**逐字照抄**，不要改寫」，驗收時比對子代理實際送出的 Prompt（`brain_scan()["calls"]`；1.2.15 以前是 `steps[].params.Prompt`）與原文（前 512 字元）相同。
+   1.2.16 起子代理常常不照抄（2026-10-08：11 張只有 3 張逐字），逐字不符的要目視確認物理細節沒被改掉。
 3. **拓樸必須正確的圖不要整張生**（串聯／並聯、電路、流程、比例圖表）：
    只生單一元件的去背素材（`isolated on a pure seamless white background`），本機複製排列、畫線、上標註。
 4. 兒童教材的人物只拍手或腳，不拍臉。
@@ -364,7 +387,7 @@ res = m.supervise(task, criteria, check,
 
 ### 驗收
 
-- **結構層（機器）**：每個 ImageName 都有 `state == DONE` 的呼叫、檔案存在、長寬比符合要求、Prompt 前 512 字元逐字相符；任何 `ERROR` 要讀錯誤訊息（429 就停）。
+- **結構層（機器）**：每個 ImageName 都有檔案（`brain_scan()` 找到原名那張）、長寬比符合要求、子代理送出的 Prompt 前 512 字元逐字相符、沒有多生的版本；任何 429（父 steps 或子代理軌跡）就停。
 - **語意層（目視為主）**：Claude 逐張依檢核表逐項判定。`~/vlm-qc/qc.py --vlm` 只能當第一道篩子（抓空白、破圖、主體不對）——
   **2026-09-10 實測：34 張接線測試圖它全部回「OK」，其中 26 張有接線或穿插錯誤，一張都沒抓到**；接線／拓樸類圖不能靠它驗收。
   物理錯誤（接線接反、LED 腳長短錯、磁鐵位置不可能）**直接同名重生，不修圖掩飾**。

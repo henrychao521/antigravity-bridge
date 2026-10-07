@@ -610,6 +610,76 @@ def _image_files() -> list[tuple[float, Path]]:
     return sorted(out)
 
 
+def brain_scan(names, since: float) -> dict:
+    """找一次派工的生圖產出與 429（agy 1.2.16 起適用，2026-10-08 實測 1.3.1）。
+
+    父對話的工具清單已經沒有 generate_image，生圖一律交給內建 image-generator 子代理（invoke_subagent），
+    所以 run_with_tools() 的 steps 看不到 generate_image；檔案寫在父對話目錄，子代理的對話是另一個 brain 目錄。
+    這裡不靠 conversation_id，直接掃 since 之後有變動的所有 brain 目錄（深度 2）：
+      images[name]  = {"file": 最新的「name_時間戳.ext」, "exact": 是否為原名, "extras": 子代理自行多生的版本（_v2、_fixed、重生）}
+                      沒有原名才退而取 name_ 開頭的最新檔，且不搶本批其他名稱的檔案。
+      calls[name]   = 子代理實際送出的 generate_image 參數（Prompt 會被子代理改寫，逐字驗收看這裡）
+      quota_errors  = 子代理軌跡裡 since 之後的 429／RESOURCE_EXHAUSTED（附 quotaResetTimeStamp、model）
+    """
+    lows = {n: n.lower() for n in names}
+    exact_re = {n: re.compile(rf"^{re.escape(lo)}_\d+\.(?:jpe?g|png|webp)$") for n, lo in lows.items()}
+    files, dirs = [], []
+    if BRAIN.exists():
+        for d in BRAIN.iterdir():
+            try:
+                if d.is_dir() and d.stat().st_mtime >= since - 5:
+                    dirs.append(d)
+            except OSError:
+                pass
+    for d in dirs:
+        for f in d.iterdir():
+            try:
+                if f.is_file() and f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and f.stat().st_mtime >= since - 5:
+                    files.append((f.stat().st_mtime, f))
+            except OSError:
+                pass
+    files.sort()
+    out = {"images": {}, "calls": {}, "quota_errors": []}
+    for n, lo in lows.items():
+        mine = [f for _, f in files if f.name.lower().startswith(lo + "_")]
+        exact = [f for f in mine if exact_re[n].match(f.name.lower())]
+        loose = [f for f in mine if not any(r.match(f.name.lower()) for k, r in exact_re.items() if k != n)]
+        pick = (exact or loose or [None])[-1]
+        out["images"][n] = {"file": str(pick) if pick else None, "exact": bool(exact),
+                            "extras": [str(f) for f in loose if f != pick]}
+    for d in dirs:
+        p = d / ".system_generated" / "logs" / "transcript_full.jsonl"
+        if not p.exists():
+            continue
+        try:
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if "generate_image" not in line and "RESOURCE_EXHAUSTED" not in line and "429" not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            t = _iso(e.get("created_at"))
+            if t and t.timestamp() < since - 5:
+                continue
+            for tc in e.get("tool_calls") or []:
+                a = tc.get("args") or {}
+                if tc.get("name") == "generate_image" and a.get("ImageName"):
+                    out["calls"].setdefault(a["ImageName"], []).append({"conversation": d.name, **a})
+            msg = str(e.get("error") or "")
+            if e.get("status") == "ERROR" and ("RESOURCE_EXHAUSTED" in msg or "429" in msg):
+                r, mm = _RESET_RE.search(msg), _MODEL_RE.search(msg)
+                out["quota_errors"].append({"conversation": d.name, "at": e.get("created_at"), "message": msg[:2000],
+                                            "reset": r.group(1) if r else None, "model": mm.group(1) if mm else ""})
+    for q in out["quota_errors"]:                      # 子代理的 429 父對話看不到，這裡補記，image_quota() 才推得出窗口
+        if q["reset"] and "image" in q["model"]:
+            record_image_exhausted(q["at"] or datetime.now().astimezone(), q["reset"], q["model"], "brain_scan")
+    return out
+
+
 def images(now: datetime | None = None) -> dict:
     """Antigravity 實際生成的圖片張數（依 brain 目錄檔案時間）。"""
     now = now or datetime.now().astimezone()
