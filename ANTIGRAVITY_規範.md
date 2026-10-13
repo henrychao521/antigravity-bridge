@@ -1,29 +1,36 @@
 # Antigravity 派工規範
 
 > 貼給新對話視窗用。搭配 `/Users/Shared/antigravity-bridge/` 底下的操作檔案。
-> 最後更新：2026-09-10（新增第十一節：教材圖片；第十二節：監測項目與 1.2.0 變更）
+> 最後更新：2026-10-13（agy 1.3.4 模型大換血：3.7 Flash、3.1 Pro、Claude 4.6 全下架，第二～四節改用新 id）
+> 前次：2026-09-10（新增第十一節：教材圖片；第十二節：監測項目與 1.2.0 變更）
 
 ## 一、這是什麼
 
 Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂閱額度，不另外計費**。
 它可以被 Claude Code 當成第二個 LLM 使喚：分攤工作、或做多方交叉驗證。
 
-執行檔：`~/.local/bin/agy`（v1.2.0，2026-09-10 確認）　憑證：沿用 Antigravity app 的 Google 登入，機器層級 keyring
+執行檔：`~/.local/bin/agy`（v1.3.4，2026-10-13 確認）　憑證：沿用 Antigravity app 的 Google 登入，機器層級 keyring
 
 ## 二、模型選擇
 
-`agy models` 實測可用清單（2026-08-29）：
+`agy models` 實測可用清單（2026-10-13，agy 1.3.4，**完整清單就這 10 個**）：
 
 | 模型 id | 配額組 | 定位 |
 |---|---|---|
-| `gemini-3.7-flash-high` / `-medium` / `-low` | Gemini | **最新世代 Flash**，快、便宜 |
-| `gemini-3.6-flash-*`、`gemini-3.5-flash-*` | Gemini | 舊世代 Flash |
-| `gemini-3.1-pro-high` / `-low` | Gemini | **Pro 推理層**，長文與複雜任務用這個 |
-| `claude-sonnet-4-6` | Claude/GPT | 異家族觀點 |
-| `claude-opus-4-6-thinking` | Claude/GPT | **最高能力**，但配額成本 37 倍 |
+| `gemini-3.8-flash-high` / `-medium` / `-low` | Gemini | **唯一的 Gemini**，快、便宜；預設主力 |
+| `claude-sonnet-5-5-high` / `-medium` / `-low` | Claude/GPT | 異家族觀點 |
+| `claude-opus-5-5-high` / `-medium` / `-low` | Claude/GPT | **最高能力**，配額成本約 Flash 的 86 倍（見第三節） |
 | `gpt-oss-120b-medium` | Claude/GPT | 第三家族觀點 |
 
+**已下架（2026-10-13 實測回 `not recognized as a known model`）**：`gemini-3.7-flash-*`、
+`gemini-3.6/3.5-flash-*`、`gemini-3.1-pro-*`、`claude-sonnet-4-6`、`claude-opus-4-6-thinking`。
+帶舊 id 的呼叫在送出前就失敗、0 token，但**會讓整批派工空轉**。agy 升版後先跑 `agy models`
+（不耗額度）對一次清單；`agy_meter.capabilities()` 的 `new_models` 會列出新增的 id。
+注意 Claude 這組現在用 `-high/-medium/-low` 後綴，**沒有 `-thinking` 後綴了**。
+
 ### 實測比較（2026-08-29，8 題有標準答案的 FeatureScript 知識測驗）
+
+> ⚠️ 下表三個模型都已下架，數字只當歷史參考；3.8 Flash／Claude 5.5 尚未重測（腳本在 `bench/`）。
 
 標準答案來源＝同一場 session 在 Onshape 上實際跑出來的結果，不是文獻。
 
@@ -42,10 +49,10 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 2. **3.1-pro 答錯時信心最高（0.92）**。它分數最高但最不會示弱，
    **不能拿它的自陳信心當可信度指標**。opus 反而最會說「我不確定」。
 
-**沒有 gemini-3.7-pro。** 3.7 只出到 Flash；Pro 最新是 3.1。所以「更高認知能力」有兩條路：
+**目前沒有任何 Gemini Pro。** 3.1 Pro 下架後 Gemini 組只剩 3.8 Flash，所以「更高認知能力」的路：
 
-- **同一個便宜配額組內** → `gemini-3.1-pro-high`（本規範的預設主力，25 頁教學報告就是它寫的）
-- **要真正更強** → `claude-opus-4-6-thinking`，但**只能偶爾用**（見成本表）
+- **同一個便宜配額組內** → `gemini-3.8-flash-high`（現在的預設主力；舊主力 3.1-pro 寫過 25 頁教學報告，3.8 尚未在同等長文上驗證）
+- **要真正更強** → `claude-opus-5-5-high`，但**只能偶爾用**（見成本表）
 
 模型的 `-high/-medium/-low` 後綴就是推理強度，**不需要另外加 `--effort`**。
 **沒有「設定預設模型」的設定檔選項**，每次呼叫都要用 `--model` 明確指定。
@@ -56,10 +63,13 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 
 | 模型 | 吃掉 5 小時配額 | 一個窗口約可跑 |
 |---|---|---|
-| `gemini-3.7-flash-high` | 0.10% | **約 1,025 次** |
-| `claude-opus-4-6-thinking` | 3.59% | **約 24 次** |
+| `gemini-3.8-flash-*`（2026-10-13，27k tok，high 與 low 相同） | 0.10% | **約 1,000 次** |
+| `gemini-3.7-flash-high`（已下架，2026-08-29） | 0.10% | 約 1,025 次 |
+| `claude-opus-4-6-thinking`（已下架，2026-08-29） | 3.59% | 約 24 次 |
+| `claude-sonnet-5-5-high`（2026-10-13，43k tok，**只 1 次樣本**） | 4.32% | **約 23 次** |
+| `claude-opus-5-5-high`（2026-10-13，43k tok，**只 1 次樣本**） | 8.63% | **約 11 次** |
 
-**差 37 倍。** 所以：
+**舊 Opus 與 Flash 差 37 倍；Opus 5.5 首次實測約 86 倍**（同樣只回 OK，底盤 token 卻多了 16k），Claude 組比以前更稀缺。 所以：
 
 - 批量、機械性、可容錯 → Gemini 組，等於免費
 - 需要異家族觀點的交叉驗證 → Claude/GPT 組，一個窗口約 24 次，省著用
@@ -70,7 +80,7 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 ## 四、基本用法
 
 ```bash
-~/.local/bin/agy -p "提示" --model gemini-3.1-pro-high --output-format json
+~/.local/bin/agy -p "提示" --model gemini-3.8-flash-high --output-format json
 ```
 
 回傳 JSON 含 `conversation_id`、`status`、`response`、`duration_seconds`、`usage`。
@@ -209,7 +219,7 @@ def check(text):                      # 必須回傳 (通過與否, 意見)
     return ok, feedback
 
 res = m.supervise(task, criteria, check,
-                  model="gemini-3.1-pro-high", max_rounds=3)
+                  model="gemini-3.8-flash-high", max_rounds=3)
 ```
 
 它用 `--conversation` 續談，所以退回時它看得到自己上一版寫了什麼，是修改而不是重寫。

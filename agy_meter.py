@@ -304,7 +304,7 @@ def run(prompt: str, model: str | None = None, schema: str | None = None,
     return data
 
 
-def supervise(task: str, criteria: str, check, model: str = "gemini-3.1-pro-high",
+def supervise(task: str, criteria: str, check, model: str = "gemini-3.8-flash-high",
               max_rounds: int = 3, timeout: int = 1800, journal=None) -> dict:
     """主管模式：派工 → 驗收 → 退回重做，直到通過或用完回合。
 
@@ -807,7 +807,7 @@ def capabilities(max_age_hours: int = 24, refresh_tools: bool = False) -> dict:
             "tools": cache.get("tools", []), "tools_checked_at": cache.get("tools_checked_at")}
     if refresh_tools:
         try:
-            out = subprocess.run([agy_bin, "--model", "gemini-3.7-flash-low", "--output-format", "stream-json",
+            out = subprocess.run([agy_bin, "--model", "gemini-3.8-flash-low", "--output-format", "stream-json",
                                   "-p=只回覆 OK"], capture_output=True, text=True, timeout=120).stdout
             for line in out.splitlines():
                 m = re.search(r'"tools"\s*:\s*(\[[^\]]*\])', line)

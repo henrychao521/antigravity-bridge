@@ -5,15 +5,16 @@
 
 ## 主線：agy CLI
 
-`~/.local/bin/agy`（v1.1.22），憑證沿用 Antigravity app 的 Google 登入，機器層級 keyring。
+`~/.local/bin/agy`（v1.3.4），憑證沿用 Antigravity app 的 Google 登入，機器層級 keyring。
 
 ```bash
-agy -p "提示" --output-format json --model gemini-3.7-flash-high --json-schema schema.json
+agy -p "提示" --output-format json --model gemini-3.8-flash-high --json-schema schema.json
 ```
 
 - 解析結果請讀 **`structured_output`** 欄位，**不要讀 `response`**——schema JSON 會漏進 prose。
-- `agy models` 看可用模型。跨家族：Gemini 3.7/3.6/3.5 Flash、Gemini 3.1 Pro、
-  **Claude Opus 4.6 / Sonnet 4.6**、GPT-OSS 120B。
+- `agy models` 看可用模型（不耗額度）。1.3.4 起只剩 10 個：Gemini 3.8 Flash、
+  **Claude Opus 5.5 / Sonnet 5.5**（各有 `-high/-medium/-low`）、GPT-OSS 120B。
+  3.7 Flash、3.1 Pro、Claude 4.6 已下架（2026-10-13），帶舊 id 會回 `not recognized`。
 - 並行時用 `--conversation <id>` 指定對話；`--continue` 抓的是「最近一個」，會互搶。
 - 每次呼叫有 ~26–30k input token 底盤（harness 系統提示），續問會走 cache。
 - 延遲 2.4s～240s 都出現過，**腳本一定要包 timeout**。
@@ -52,7 +53,8 @@ B − A = 129.486 mm³，等於 Pappus 定理算出的圓角體積解析解，**
 
 ### 三個模型的知識測驗
 
-8 題有實測標準答案的 FeatureScript 測驗（標準答案來自實際執行結果，非文獻）：
+8 題有實測標準答案的 FeatureScript 測驗（標準答案來自實際執行結果，非文獻）。
+2026-08-29 測的，**三個模型都已下架**，新模型尚未重測：
 
 | 模型 | 得分 | 答錯時平均信心 |
 |---|---|---|
@@ -117,7 +119,7 @@ quota_samples, claude_calls, claude_billable_tokens, claude_cache_read_tokens`
 ### cross_check.py — 同題多模型交叉驗證
 ```bash
 ./cross_check.py "要驗證的主張"
-./cross_check.py "主張" gemini-3.1-pro-high claude-opus-4-6-thinking
+./cross_check.py "主張" gemini-3.8-flash-high claude-opus-5-5-high
 ```
 並行問多個模型，輸出各自判定／理由／最易忽略前提，結論分歧會標出來。自動記帳。
 
@@ -153,8 +155,11 @@ agyq status
 
 | 模型 | 每次約 tok | 吃掉 5h 配額 | 一個 5h 窗口約可跑 |
 |---|---|---|---|
-| gemini-3.7-flash-high | 26k | **0.10%** | **~1,025 次** |
-| claude-opus-4-6-thinking | 29k | **3.59%** | **~24 次** |
+| gemini-3.7-flash-high（已下架） | 26k | **0.10%** | **~1,025 次** |
+| claude-opus-4-6-thinking（已下架） | 29k | **3.59%** | **~24 次** |
+| gemini-3.8-flash-*（2026-10-13） | 27k | **0.10%** | **~1,000 次** |
+| claude-sonnet-5-5-high（1 次樣本） | 43k | **4.32%** | **~23 次** |
+| claude-opus-5-5-high（1 次樣本） | 43k | **8.63%** | **~11 次** |
 
 token 數幾乎一樣，配額成本差 **37 倍**。所以：
 - 批量、機械性、可容錯的工作 → 一律 Gemini 組，等於免費

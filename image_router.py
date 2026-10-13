@@ -192,7 +192,7 @@ def prompt_for(items):
 
 def run_agy(items, out_dir):
     t0 = time.time()
-    r = m.run_with_tools(prompt_for(items), model="gemini-3.7-flash-high", timeout=2700, print_timeout="40m",
+    r = m.run_with_tools(prompt_for(items), model="gemini-3.8-flash-high", timeout=2700, print_timeout="40m",
                          note="image_router " + ",".join(j["name"] for j in items))
     conv = r.get("conversation_id") or ""
     final = {}

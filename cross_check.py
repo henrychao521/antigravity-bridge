@@ -13,7 +13,7 @@ import agy_meter
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = HERE / "verdict_schema.json"
-DEFAULT = ["gemini-3.7-flash-high", "claude-opus-4-6-thinking", "gpt-oss-120b-medium"]
+DEFAULT = ["gemini-3.8-flash-high", "claude-opus-5-5-high", "gpt-oss-120b-medium"]
 
 
 def ask(claim: str, model: str) -> tuple[str, dict]:
