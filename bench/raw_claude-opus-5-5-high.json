@@ -1,0 +1,51 @@
+{
+ "claude-opus-5-5-high": {
+  "answers": [
+   {
+    "answer": "不行。evBox3d 只會回傳包圍盒（Box3d），不會給你面上的點或法線。平面請用 evPlane(context, {\"face\": face})，取回的 Plane 裡 .origin 是點、.normal 是外法線；如果要某個參數位置的切平面，就用 evFaceTangentPlane(context, {\"face\": face, \"parameter\": vector(0.5, 0.5)})。",
+    "confidence": 0.8,
+    "q": 1
+   },
+   {
+    "answer": "做 UNION 時，要合併的所有實體都放在 \"tools\"（一個 Query）。\"targets\" 主要是 SUBTRACTION、INTERSECTION 用的被運算對象，UNION 通常不用填。",
+    "confidence": 0.7,
+    "q": 2
+   },
+   {
+    "answer": "fCuboid(context, id, {\"corner1\": vector(...)*unit, \"corner2\": vector(...)*unit})。",
+    "confidence": 0.85,
+    "q": 3
+   },
+   {
+    "answer": "我不熟這個 MCP 工具。如果它傳進來的是標準 Id（由 newId() 產生），那 id + \"base\" 可以直接寫；如果傳的是字串或其他型別，就要改用 newId() + \"base\" 或 makeId(...)。實際型別要以該工具的實作為準。",
+    "confidence": 0.3,
+    "q": 4
+   },
+   {
+    "answer": "我無法確定目前最新的數字，它會隨版本持續增加；我記得近年大約在 2xxx 這個範圍。實際應以新開 Feature Studio 自動產生的版本標頭為準。",
+    "confidence": 0.1,
+    "q": 5
+   },
+   {
+    "answer": "evVolume 回傳的不是純數字，而是帶單位的 ValueWithUnits（體積單位）。要得到立方公釐的純數字，寫 evVolume(context, {\"entities\": q}) / (millimeter ^ 3)。",
+    "confidence": 0.85,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 的 \"sketchPlane\" 吃的是 Query，也就是平面面或基準平面。newSketchOnPlane 的 \"sketchPlane\" 吃的是 Plane 值物件，例如 plane(origin, normal, x)。",
+    "confidence": 0.85,
+    "q": 7
+   },
+   {
+    "answer": "我的理解是：REST 傳來的參數就是最終值，沒傳的參數可能是空值或未定義，不會自動拿 UI 對話框的預設值補上。LengthBoundSpec 的預設值主要是 UI 在用，不能指望它透過 REST 生效，最好把所有參數都明確傳進去。",
+    "confidence": 0.35,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 43.1,
+  "tokens": 46510,
+  "quota_delta": null,
+  "error": null
+ }
+}

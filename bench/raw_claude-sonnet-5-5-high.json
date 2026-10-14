@@ -1,0 +1,51 @@
+{
+ "claude-sonnet-5-5-high": {
+  "answers": [
+   {
+    "answer": "語法上能呼叫，但 evBox3d 只回傳包圍盒（minCorner/maxCorner），不是面上一點與法線，所以不適用。應改用 evPlane（平面面）或 evFaceTangentPlane(context,{\"face\":face,\"parameter\":vector(0.5,0.5)})，取回 Plane 的 origin 與 normal；另外 evBox3d 屬 evaluate.fs，不在 geometry.fs。",
+    "confidence": 0.65,
+    "q": 1
+   },
+   {
+    "answer": "tools 放要參與運算的實體 Query（UNION 時就是所有要聯集的 body，例如 qUnion([...])）。targets 在 UNION 時可省略或放同一批 body；SUBTRACTION/INTERSECTION 才需分別指定 targets（被切的）與 tools（切的）。",
+    "confidence": 0.45,
+    "q": 2
+   },
+   {
+    "answer": "我不確定標準庫有直接建長方體的單一函式（可能是 primitives.fs 的 opCuboid 之類，但記不準）。穩妥做法是畫矩形草圖（skRectangle）再用 opExtrude 拉伸。",
+    "confidence": 0.3,
+    "q": 3
+   },
+   {
+    "answer": "id 是 FeatureScript 的 Id 型別，不是字串。Id 有定義 operator+(Id, string)，所以 id + \"base\" 可以直接寫，會產生子 Id。",
+    "confidence": 0.55,
+    "q": 4
+   },
+   {
+    "answer": "不確定。版本號一直在增加，我沒有可靠的最新數字（大約是數千的量級），建議直接查 Onshape 當前版本或新建 Feature Studio 看預設標頭。",
+    "confidence": 0.1,
+    "q": 5
+   },
+   {
+    "answer": "回傳的是 ValueWithUnits（體積單位），不是純數字。要得到立方公釐純數字寫 evVolume(context,{\"entities\":q}) / millimeter^3。",
+    "confidence": 0.9,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 的 sketchPlane 是 Query（例如某個平面面或基準面實體）；newSketchOnPlane 的 sketchPlane 是 Plane 值（由 plane(origin, normal) 建構的幾何值，不是 Query）。",
+    "confidence": 0.85,
+    "q": 7
+   },
+   {
+    "answer": "透過 REST API 新增的自訂特徵，parameters 會是空陣列（沒有任何參數值）。precondition 中 LengthBoundSpec 的預設值只是 UI 建立特徵時填入，API 端不會自動套用，所以不會生效，必須在 API 中明確傳入參數值。",
+    "confidence": 0.6,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 44.3,
+  "tokens": 47177,
+  "quota_delta": null,
+  "error": null
+ }
+}

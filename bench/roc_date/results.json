@@ -1,0 +1,53 @@
+{
+ "claude-opus-5-5-high": {
+  "status": "SUCCESS",
+  "secs": 70.6,
+  "tokens": 53735,
+  "quota": null,
+  "passed": 37,
+  "total": 37,
+  "fails": [],
+  "load_error": null
+ },
+ "claude-sonnet-5-5-high": {
+  "status": "SUCCESS",
+  "secs": 76.7,
+  "tokens": 56361,
+  "quota": null,
+  "passed": 37,
+  "total": 37,
+  "fails": [],
+  "load_error": null
+ },
+ "gemini-3.8-flash-high": {
+  "status": "SUCCESS",
+  "secs": 306.7,
+  "tokens": 146515,
+  "quota": null,
+  "passed": 37,
+  "total": 37,
+  "fails": [],
+  "load_error": null
+ },
+ "gpt-oss-120b-medium": {
+  "status": "SUCCESS",
+  "secs": 52.8,
+  "tokens": 21513,
+  "quota": null,
+  "passed": 35,
+  "total": 37,
+  "fails": [
+   {
+    "in": "一一五年十月十四日",
+    "want": "2026-10-14",
+    "got": "1918-10-14"
+   },
+   {
+    "in": "民國一〇五年十二月三十一日",
+    "want": "2016-12-31",
+    "got": "1917-12-31"
+   }
+  ],
+  "load_error": null
+ }
+}

@@ -13,7 +13,8 @@ import agy_meter
 
 HERE = Path(__file__).resolve().parent
 SCHEMA = HERE / "verdict_schema.json"
-DEFAULT = ["gemini-3.8-flash-high", "claude-opus-5-5-high", "gpt-oss-120b-medium"]
+# 2026-10-14 實測 Opus 5.5 一次吃週額度 5–7%，預設改 Sonnet 5.5（約半價）；要最強判斷時在命令列指定 claude-opus-5-5-high
+DEFAULT = ["gemini-3.8-flash-high", "claude-sonnet-5-5-high", "gpt-oss-120b-medium"]
 
 
 def ask(claim: str, model: str) -> tuple[str, dict]:

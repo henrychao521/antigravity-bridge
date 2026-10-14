@@ -28,6 +28,33 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 （不耗額度）對一次清單；`agy_meter.capabilities()` 的 `new_models` 會列出新增的 id。
 注意 Claude 這組現在用 `-high/-medium/-low` 後綴，**沒有 `-thinking` 後綴了**。
 
+### 實測比較（2026-10-14，現役模型重跑同一份 8 題測驗＋一題寫程式）
+
+知識測驗沿用 8/29 的題目與實測標準答案（`bench/score_2026_10_14.py`，逐題理由寫在檔內）；
+寫程式題是「民國日期轉西元」函式，37 個隱藏測試自動判分（`bench/roc_date/`）。
+
+| 模型 | 知識 8 題 | 答錯時平均信心 | 寫程式 37 題 | 每次吃掉 5h／週配額 | 耗時 |
+|---|---|---|---|---|---|
+| `claude-opus-5-5-high` | **7.5 / 8** | **0.30** | 37 / 37 | **10.6–14.1% ／ 5.3–7.0%** | 43–71s |
+| `claude-sonnet-5-5-high` | 5.5 / 8 | 0.43 | 37 / 37 | 5.6–7.7% ／ 2.8–3.9% | 44–77s |
+| `gemini-3.8-flash-high` | 4 / 8 | 0.69 | 37 / 37 | 0.8% ／ 0.2% | **174–307s** |
+| `gpt-oss-120b-medium` | 3.5 / 8 | 0.85 | 35 / 37 | 0.1–0.4% | 53–166s |
+
+- **Opus 5.5 是目前最強，也最會示弱**：8/29 三家全錯的 Q2（UNION 不能給 targets）它答對，
+  Q4 答不出但自承不熟（信心 0.3）。比舊 3.1 Pro（5.5/8、錯題信心 0.92）明顯好。
+- **代價很高**：一次 5 萬 token 級的呼叫吃 Claude 組 5h 窗口 11–14%、**週額度 5–7%**，一週約十幾次就見底。
+  只留給真的需要最強判斷的交叉驗證；一般異家族觀點用 Sonnet 5.5（約一半價）。
+  → **`cross_check.py` 與 agyq 預設已改用 Sonnet 5.5（2026-10-14）**，要 Opus 時明確指定。
+- **Gemini 3.8 Flash 知識面和 3.7 一樣（4/8）**，但寫程式不輸；**沒有 Pro 之後，它也是最慢的**（3–5 分鐘）。
+- gpt-oss 會捏造 API（`box()`、`@libraryVersion 9`）且信心高，國字數字也寫錯，只適合當第三票。
+- 寫程式題太簡單（前三家全對），分不出高下；下次要加更刁的題目。
+
+**`gemini-4-argon`（-high/-medium/-low）已寫在 agy 1.3.4 程式裡，但伺服器還沒開給這個帳號**
+（2026-10-14 實測 not recognized，`agy models` 也沒有）。等它出現在 `agy models` 再測，不要用自訂模型設定硬叫。
+
+**`--effort` 新增 `xhigh`／`max`，但目前三個模型都只支援 low/medium/high**（錯誤訊息會列出可用強度）。
+`--effort` 要配不帶後綴的 id（`--model gemini-3.8-flash --effort high`），和 `-high` 後綴同時給會報 conflicts。
+
 ### 實測比較（2026-08-29，8 題有標準答案的 FeatureScript 知識測驗）
 
 > ⚠️ 下表三個模型都已下架，數字只當歷史參考；3.8 Flash／Claude 5.5 尚未重測（腳本在 `bench/`）。
@@ -449,6 +476,18 @@ res = m.supervise(task, criteria, check,
   代表 agy 是登入的。現在 `quota()` 失敗會重試一次、把原因寫進 `agy_meter.QUOTA_LAST["error"]`，
   並回傳上一次成功的快取（`quota_cache.json`）；小工具標題改成 `◇`、第一列註明「N 分鐘前資料（本次查詢逾時）」，
   只有錯誤訊息真的提到登入時才顯示「未登入」。
+
+### 1.2.11～1.3.4 值得知道的變更（2026-10-14 盤點）
+
+- **1.3.4 起 `~/.gemini/config/plugins/` 裡的 10 個官方外掛全部視為已安裝並啟用**（資料夾是桌面版早就放的，1.3.3 還顯示沒有外掛）：
+  skill 從 0 個變 128 個（science 42、data-agent-kit 34、flutter 23、firebase 13…），子代理多了 `firestore-rules-author`、`flutter_a11y_agent`。
+  實測**不影響**：極短呼叫底盤仍約 27k token，外掛帶的 MCP（dart、gemini-api-docs）在無頭模式不會啟動。
+- **工具 58 → 60**：新增 `search_marketplace`、`list_plugin_accounts`（代理可以自己搜外掛市集；沒有安裝外掛的工具）。
+- **1.3.2：官方外掛市集**，`agy plugin install <名稱>@antigravity-plugins-official`。安裝前要先跟使用者確認。
+- **1.3.3：額度用完會立即回報**，不再重試；登入過期會明講 `Authentication expired`。
+- **1.2.14：`--json-schema` 變嚴格**，根節點不是 `"type": "object"` 會直接以結束碼 1 失敗。
+- **1.2.15：子代理被拒絕的權限不會再繞路**用其他指令或腳本達成。
+- **1.2.17：模型上架、下架公告卡**只在互動介面顯示，無頭模式看不到，換模型要靠 `agy models` 比對。
 
 ### 1.1.23～1.2.0 值得知道的變更（官方 changelog）
 

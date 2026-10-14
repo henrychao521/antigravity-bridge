@@ -1,0 +1,51 @@
+{
+ "gemini-3.8-flash-high": {
+  "answers": [
+   {
+    "answer": "不可行，evBox3d 僅回傳邊界框（Box3d）。正確做法是使用 evPlane(context, { \"face\" : face })，其回傳的 Plane 結構即包含面上一點（origin）與外法線（normal）。",
+    "confidence": 0.98,
+    "q": 1
+   },
+   {
+    "answer": "targets 放要保留本體身分並被合併的目標實體（若全部實體互聯可為空或省略），tools 放要併入目標實體的工具實體 Query。",
+    "confidence": 0.95,
+    "q": 2
+   },
+   {
+    "answer": "FeatureScript 標準函式庫中並無直接建立長方體的單一原生函式（如 opBox 並不存在）；標準做法須透過草圖繪製矩形後呼叫 opExtrude 拉伸建立。",
+    "confidence": 0.9,
+    "q": 3
+   },
+   {
+    "answer": "標準環境下傳入的是 Id 型別，可以直接寫 id + \"base\" 產生子 ID；若測試工具傳入的是字串型別則不行（FS 字串連接須用 ~ 且需以 makeId 轉換）。",
+    "confidence": 0.55,
+    "q": 4
+   },
+   {
+    "answer": "Onshape 每三週遞增此版本號，目前版本大約在 2400～2600 左右（例如 2486 以上）；因版本持續更新，無法在未連網查閱下確定最新單一數字。",
+    "confidence": 0.35,
+    "q": 5
+   },
+   {
+    "answer": "evVolume 回傳的是帶有體積單位的 ValueWithUnits 而非純數字。若要取得立方公釐純數字，應寫為 evVolume(context, ...) / (millimeter * millimeter * millimeter)（或除以相應立方單位）。",
+    "confidence": 0.95,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 依附於 Part Studio 既有拓撲實體，其 sketchPlane 接受 Query（如平面面或基準面）；newSketchOnPlane 則直接建立在數學平面上，其 sketchPlane 接受幾何結構 Plane。",
+    "confidence": 0.95,
+    "q": 7
+   },
+   {
+    "answer": "parameters 僅會包含 API payload 中明確指定的參數，未傳入者為 undefined；precondition 中定義的預設值僅在網頁端 UI 互動時生效，透過 REST API 建立時不會自動補齊生效。",
+    "confidence": 0.9,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 173.8,
+  "tokens": 49522,
+  "quota_delta": null,
+  "error": null
+ }
+}

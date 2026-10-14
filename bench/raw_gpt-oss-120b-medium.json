@@ -1,0 +1,51 @@
+{
+ "gpt-oss-120b-medium": {
+  "answers": [
+   {
+    "answer": "No. evBox3d only returns a 3D bounding box. To get a point on the face and its outward normal you should use evPlane(context, {\"face\": face}) (or evFaceTangentPlane for a specific UV location), which returns a Plane record with an origin point and a normal vector.",
+    "confidence": 0.94,
+    "q": 1
+   },
+   {
+    "answer": "For a UNION operation, put the bodies you want to merge in the `tools` array (usually via qUnion([...]) or a query that selects all bodies). `targets` is normally left empty for a simple union; it is only needed for advanced grouping when `targetsAndToolsNeedGrouping` is true.",
+    "confidence": 0.89,
+    "q": 2
+   },
+   {
+    "answer": "The standard function to directly create a solid box is `box` (from onshape/std/geometry.fs). Example: const solid = box(context, id, {\"size\": vector(10*mm, 20*mm, 30*mm)});",
+    "confidence": 0.86,
+    "q": 3
+   },
+   {
+    "answer": "`id` is a string representing the feature ID, so concatenating it with another string (e.g., id + \"base\") is valid.",
+    "confidence": 0.93,
+    "q": 4
+   },
+   {
+    "answer": "The current libraryVersion header is @libraryVersion 9.",
+    "confidence": 0.68,
+    "q": 5
+   },
+   {
+    "answer": "`evVolume` returns a ValueWithUnits object. To obtain a plain numeric value in cubic millimetres you can do: const vol = evVolume(context, {\"entities\": bodies}); const volMm3 = vol.value * (1*mm^3); // or vol.toNumber(mm^3)",
+    "confidence": 0.9,
+    "q": 6
+   },
+   {
+    "answer": "`newSketch` takes a SketchPlane (a custom plane defined by origin, normal, xAxis, yAxis). `newSketchOnPlane` takes an existing Plane or a planar Face directly.",
+    "confidence": 0.88,
+    "q": 7
+   },
+   {
+    "answer": "When adding a custom feature via the REST API, the `parameters` array is empty unless you explicitly supply values. Defaults set in the precondition (e.g., a LengthBoundSpec) are not automatically applied; you must include the default values in the parameters payload for them to take effect.",
+    "confidence": 0.85,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 165.6,
+  "tokens": 85037,
+  "quota_delta": null,
+  "error": null
+ }
+}

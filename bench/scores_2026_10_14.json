@@ -1,0 +1,26 @@
+{
+ "claude-opus-5-5-high": {
+  "score": 7.5,
+  "conf_wrong": 0.3,
+  "secs": 43.1,
+  "tokens": 46510
+ },
+ "claude-sonnet-5-5-high": {
+  "score": 5.5,
+  "conf_wrong": 0.433,
+  "secs": 44.3,
+  "tokens": 47177
+ },
+ "gemini-3.8-flash-high": {
+  "score": 4,
+  "conf_wrong": 0.688,
+  "secs": 173.8,
+  "tokens": 49522
+ },
+ "gpt-oss-120b-medium": {
+  "score": 3.5,
+  "conf_wrong": 0.85,
+  "secs": 165.6,
+  "tokens": 85037
+ }
+}

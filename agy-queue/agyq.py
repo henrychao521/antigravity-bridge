@@ -55,9 +55,8 @@ WEEKLY_RESERVE = {"Claude and GPT models": 0.30, "Gemini Models": 0.20}
 STATES = ("inbox", "claimed", "done", "failed", "waiting-cable")
 # 2026-09-25 使用者：多一些模型交叉查證比較好。
 # 2026-10-13 agy 1.3.4 下架 gemini-3.1-pro、claude 4.6 系列（實測 not recognized），
-# 只剩三家四種觀點：Gemini 3.8 Flash／Claude Sonnet 5.5／Claude Opus 5.5／GPT-OSS
-DEFAULT_MODELS = ["gemini-3.8-flash-high", "claude-sonnet-5-5-high",
-                  "claude-opus-5-5-high", "gpt-oss-120b-medium"]
+# 2026-10-14 Opus 5.5 一次吃週額度 5–7%，大批審查不放進預設；要用時 --models 指定 claude-opus-5-5-high
+DEFAULT_MODELS = ["gemini-3.8-flash-high", "claude-sonnet-5-5-high", "gpt-oss-120b-medium"]
 # 單次提示的字元上限。超過就把素材切成幾份分別審查再合併。
 # gpt-oss-120b 實測：69k 字元可以、134k 字元回空白（上下文放不下）
 MODEL_MAX_CHARS = {"gpt-oss-120b-medium": 60_000}

@@ -119,7 +119,7 @@ quota_samples, claude_calls, claude_billable_tokens, claude_cache_read_tokens`
 ### cross_check.py — 同題多模型交叉驗證
 ```bash
 ./cross_check.py "要驗證的主張"
-./cross_check.py "主張" gemini-3.8-flash-high claude-opus-5-5-high
+./cross_check.py "主張" gemini-3.8-flash-high claude-opus-5-5-high   # 預設是 Sonnet 5.5，Opus 很貴要明確指定
 ```
 並行問多個模型，輸出各自判定／理由／最易忽略前提，結論分歧會標出來。自動記帳。
 
