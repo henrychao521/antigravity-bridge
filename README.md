@@ -5,14 +5,14 @@
 
 ## 主線：agy CLI
 
-`~/.local/bin/agy`（v1.3.4），憑證沿用 Antigravity app 的 Google 登入，機器層級 keyring。
+`~/.local/bin/agy`（v1.4.0），憑證沿用 Antigravity app 的 Google 登入，機器層級 keyring。
 
 ```bash
 agy -p "提示" --output-format json --model gemini-3.8-flash-high --json-schema schema.json
 ```
 
 - 解析結果請讀 **`structured_output`** 欄位，**不要讀 `response`**——schema JSON 會漏進 prose。
-- `agy models` 看可用模型（不耗額度）。1.3.4 起只剩 10 個：Gemini 3.8 Flash、
+- `agy models` 看可用模型（不耗額度）。1.4.0 共 13 個：**Gemini 4 Argon**（2026-10-16 開放，獨立週額度、一週約 30 次）、Gemini 3.8 Flash、
   **Claude Opus 5.5 / Sonnet 5.5**（各有 `-high/-medium/-low`）、GPT-OSS 120B。
   3.7 Flash、3.1 Pro、Claude 4.6 已下架（2026-10-13），帶舊 id 會回 `not recognized`
   （7 秒內失敗、不建立對話；生圖腳本會看起來像全部失敗，先查 id）。
@@ -55,7 +55,7 @@ B − A = 129.486 mm³，等於 Pappus 定理算出的圓角體積解析解，**
 ### 三個模型的知識測驗
 
 8 題有實測標準答案的 FeatureScript 測驗（標準答案來自實際執行結果，非文獻）。
-2026-08-29 測的，**三個模型都已下架**（現役模型 2026-10-14 重測結果見規範第二節）：
+2026-08-29 測的，**三個模型都已下架**（現役模型 2026-10-14 重測、Gemini 4 Argon 2026-10-16 補測，結果見規範第二節；Argon 7.5/8 與 Opus 5.5 同分）：
 
 | 模型 | 得分 | 答錯時平均信心 |
 |---|---|---|

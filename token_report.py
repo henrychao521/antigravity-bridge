@@ -29,11 +29,13 @@ def cost_per_call(entries: list[dict]) -> dict[str, dict]:
         d = e.get("quota_delta_pct") or {}
         model = e.get("model", "?")
         pref = bucket_prefix(model)
-        five_h = d.get(f"{pref}-5h")
+        # Gemini 4 Argon（2026-10 開放）只扣自己的週額度 gemini-argon-wtu-weekly，沒有 5h 窗口
+        bucket = "gemini-argon-wtu-weekly" if "argon" in model else f"{pref}-5h"
+        five_h = d.get(bucket)
         if five_h is None:
             continue
         a = acc.setdefault(model, {"n": 0, "pct_5h": 0.0, "pct_weekly": 0.0,
-                                   "tokens": 0, "prefix": pref})
+                                   "tokens": 0, "prefix": pref, "bucket": bucket})
         a["n"] += 1
         a["pct_5h"] += max(five_h, 0.0)
         a["pct_weekly"] += max(d.get(f"{pref}-weekly", 0.0), 0.0)
@@ -110,11 +112,11 @@ def main() -> None:
     else:
         print(f"  {'模型':<28}{'次數':>4}{'平均tok':>9}{'吃掉5h%':>9}{'還能跑':>8}")
         for model, a in sorted(costs.items(), key=lambda kv: -kv[1]["avg_5h"]):
-            r = remain.get(f"{a['prefix']}-5h", 0)
+            r = remain.get(a["bucket"], 0)
             left = "充裕" if a["avg_5h"] <= 0.001 else f"{int(r / a['avg_5h'])} 次"
             print(f"  {model:<28}{a['n']:>4}{a['avg_tokens']:>9,}"
-                  f"{a['avg_5h']:>9.2f}{left:>8}")
-        print("  ※「還能跑」= 目前 5 小時窗口剩餘 ÷ 該模型每次平均消耗")
+                  f"{a['avg_5h']:>9.2f}{left:>8}" + ("　← Argon 週額度" if "argon" in a["bucket"] else ""))
+        print("  ※「還能跑」= 目前 5 小時窗口剩餘 ÷ 該模型每次平均消耗（Argon 沒有 5h 窗口，改用它自己的週額度）")
 
     # ── 工具使用次數（無公開額度者只記次數）──
     tu = agy_meter.tool_usage(since)

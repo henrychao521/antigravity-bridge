@@ -1,0 +1,51 @@
+{
+ "gemini-4-argon-high": {
+  "answers": [
+   {
+    "answer": "不可行，因為 evBox3d 只會回傳軸對齊包圍盒（Box3d），不會給出面法線。正確做法是對平面呼叫 evPlane(context, {\"face\": face})（取得含 origin 與外法線 normal 的 Plane），或對一般曲面使用 evFaceTangentPlane。",
+    "confidence": 0.95,
+    "q": 1
+   },
+   {
+    "answer": "在 BooleanOperationType.UNION 時，所有要合併的實體 Query 都應放在 tools 裡，不需要填 targets。targets 僅在 SUBTRACTION（差集）等需要區分被減體與工具體的布林運算中使用。",
+    "confidence": 0.9,
+    "q": 2
+   },
+   {
+    "answer": "標準函式名稱是 fCuboid（呼叫方式為 fCuboid(context, id, {\"corner1\": ..., \"corner2\": ...})）。FeatureScript 標準庫中並沒有 opCuboid 或 opBox。",
+    "confidence": 0.95,
+    "q": 3
+   },
+   {
+    "answer": "在 Onshape 評估 FeatureScript 的 lambda 中第二個參數實際上是 queries（map 型別）而非 Id（或取決於該 MCP 工具封裝，並非標準特徵的 Id），因此不能直接寫 id + \"base\"，若需建立 Id 應使用 newId() + \"base\"。由于不確定該特定 MCP 工具的內部封裝細節，此題給予較低信心。",
+    "confidence": 0.3,
+    "q": 4
+   },
+   {
+    "answer": "Onshape 的 libraryVersion 為四位數整數（近年約在 2500～2900 區間，隨每三週更新遞增），但我無法在不查文件的情況下確定當下最新的精確版號。",
+    "confidence": 0.2,
+    "q": 5
+   },
+   {
+    "answer": "evVolume 回傳的是帶有體積單位的 ValueWithUnits，而非純數字。若要取得以立方公釐為單位的純數字（number），需將結果除以單位：evVolume(context, {\"entities\": entities}) / (millimeter ^ 3)。",
+    "confidence": 0.95,
+    "q": 6
+   },
+   {
+    "answer": "newSketch 用於在既有幾何平面上建立草圖，其 sketchPlane 參數接受 Query 型別（指向平面 face 或 Mate Connector）；newSketchOnPlane 則用於在數學平面上建立草圖，其 sketchPlane 參數接受 Plane 型別。",
+    "confidence": 0.95,
+    "q": 7
+   },
+   {
+    "answer": "透過 REST API 新增自訂特徵時，若未在 payload 中明確傳入 parameters，參數會是空的或僅有系統基礎預設值。precondition 中的自訂 LengthBoundSpec 預設值主要是供 UI 建立特徵時讀取填入，透過 REST API 呼叫時不會自動套用該自訂預設值。",
+    "confidence": 0.55,
+    "q": 8
+   }
+  ],
+  "status": "SUCCESS",
+  "secs": 92.3,
+  "tokens": 31903,
+  "quota_delta": null,
+  "error": null
+ }
+}

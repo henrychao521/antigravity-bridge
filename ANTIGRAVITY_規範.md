@@ -1,7 +1,8 @@
 # Antigravity 派工規範
 
 > 貼給新對話視窗用。搭配 `/Users/Shared/antigravity-bridge/` 底下的操作檔案。
-> 最後更新：2026-10-16（各專案腳本殘留的 3.7 Flash 全面改 3.8；第十一節加「生圖指令要明講交給 image-generator 子代理」）
+> 最後更新：2026-10-16 晚（agy 1.4.0：**Gemini 4 Argon 開放**，第二節；使用者指定程式設計、App 修正也可以派給它；**Argon 是獨立週額度、知識測驗 7.5/8**，第二、三、十二節）
+> 前一版：2026-10-16（各專案腳本殘留的 3.7 Flash 全面改 3.8；第十一節加「生圖指令要明講交給 image-generator 子代理」）
 > 前次：2026-10-13（agy 1.3.4 模型大換血：3.7 Flash、3.1 Pro、Claude 4.6 全下架，第二～四節改用新 id）
 > 更早：2026-09-10（新增第十一節：教材圖片；第十二節：監測項目與 1.2.0 變更）
 
@@ -10,15 +11,16 @@
 Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂閱額度，不另外計費**。
 它可以被 Claude Code 當成第二個 LLM 使喚：分攤工作、或做多方交叉驗證。
 
-執行檔：`~/.local/bin/agy`（v1.3.4，2026-10-13 確認）　憑證：沿用 Antigravity app 的 Google 登入，機器層級 keyring
+執行檔：`~/.local/bin/agy`（v1.4.0，2026-10-16 確認）　憑證：沿用 Antigravity app 的 Google 登入，機器層級 keyring
 
 ## 二、模型選擇
 
-`agy models` 實測可用清單（2026-10-13，agy 1.3.4，**完整清單就這 10 個**）：
+`agy models` 實測可用清單（2026-10-16，agy 1.4.0，**完整清單 13 個**；10-13 的 1.3.4 是 10 個，少 Argon 三個）：
 
 | 模型 id | 配額組 | 定位 |
 |---|---|---|
-| `gemini-3.8-flash-high` / `-medium` / `-low` | Gemini | **唯一的 Gemini**，快、便宜；預設主力 |
+| `gemini-4-argon-high` / `-medium` / `-low` | **Argon 專屬週額度**（沒有 5h 窗口） | **2026-10-16 開放（agy 1.4.0）**；程式設計、架構分析、長文件推理優先用 high；**一週約 30 次**，見第三節 |
+| `gemini-3.8-flash-high` / `-medium` / `-low` | Gemini | 快、便宜；批量機械性工作 |
 | `claude-sonnet-5-5-high` / `-medium` / `-low` | Claude/GPT | 異家族觀點 |
 | `claude-opus-5-5-high` / `-medium` / `-low` | Claude/GPT | **最高能力**，配額成本約 Flash 的 86 倍（見第三節） |
 | `gpt-oss-120b-medium` | Claude/GPT | 第三家族觀點 |
@@ -43,6 +45,7 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 | `claude-sonnet-5-5-high` | 5.5 / 8 | 0.43 | 37 / 37 | 5.6–7.7% ／ 2.8–3.9% | 44–77s |
 | `gemini-3.8-flash-high` | 4 / 8 | 0.69 | 37 / 37 | 0.8% ／ 0.2% | **174–307s** |
 | `gpt-oss-120b-medium` | 3.5 / 8 | 0.85 | 35 / 37 | 0.1–0.4% | 53–166s |
+| `gemini-4-argon-high`（10-16 補測） | **7.5 / 8** | **0.20** | 37 / 37 | Argon 週額度 2.3–3.6% | 92s／199s |
 
 - **Opus 5.5 是目前最強，也最會示弱**：8/29 三家全錯的 Q2（UNION 不能給 targets）它答對，
   Q4 答不出但自承不熟（信心 0.3）。比舊 3.1 Pro（5.5/8、錯題信心 0.92）明顯好。
@@ -53,8 +56,13 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 - gpt-oss 會捏造 API（`box()`、`@libraryVersion 9`）且信心高，國字數字也寫錯，只適合當第三票。
 - 寫程式題太簡單（前三家全對），分不出高下；下次要加更刁的題目。
 
-**`gemini-4-argon`（-high/-medium/-low）已寫在 agy 1.3.4 程式裡，但伺服器還沒開給這個帳號**
-（2026-10-14 實測 not recognized，`agy models` 也沒有）。等它出現在 `agy models` 再測，不要用自訂模型設定硬叫。
+**`gemini-4-argon`（-high/-medium/-low）2026-10-16 已開放**（agy 1.4.0，`agy models` 列出）。
+首測（寫一個有邊界條件的 Python 函式，5 個自動測試）：argon-high **5/5 全過、24.7 秒、28k tokens**（輸入 27.3k 主要是系統提示）。
+10-14 時還是 not recognized；舊紀錄保留供對照。
+**同一份 8 題測驗＋37 題寫程式（2026-10-16 晚，`bench/score_2026_10_16.py`）：知識 7.5/8，和 Opus 5.5 同分，答錯時信心更低（0.20）；寫程式 37/37。**
+8/29 三家全錯的 Q2（UNION）、只有 Opus 答出的 Q3（fCuboid）它都答對；Q4 答出「id 是 map、不能加字串」（信心 0.3）；Q5 承認不確定但給了錯的區間（半分）。
+比 3.8 Flash 快（知識題 92 秒對 174 秒），但**配額是另一個獨立的週額度**（見第三節），不能當批量主力。長文件品質仍待實測。
+**使用者 10-16 指示：程式設計、App 修正也可以請它協助思考處理**（仍照第一節：驗收由 Claude 做、派工方不兼裁判）。
 
 **`--effort` 新增 `xhigh`／`max`，但目前三個模型都只支援 low/medium/high**（錯誤訊息會列出可用強度）。
 `--effort` 要配不帶後綴的 id（`--model gemini-3.8-flash --effort high`），和 `-high` 後綴同時給會報 conflicts。
@@ -80,10 +88,11 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 2. **3.1-pro 答錯時信心最高（0.92）**。它分數最高但最不會示弱，
    **不能拿它的自陳信心當可信度指標**。opus 反而最會說「我不確定」。
 
-**目前沒有任何 Gemini Pro。** 3.1 Pro 下架後 Gemini 組只剩 3.8 Flash，所以「更高認知能力」的路：
+**Gemini 組（便宜、5h＋週）只有 3.8 Flash；Argon 另有自己的週額度。** 「更高認知能力」的路：
 
-- **同一個便宜配額組內** → `gemini-3.8-flash-high`（現在的預設主力；舊主力 3.1-pro 寫過 25 頁教學報告，3.8 尚未在同等長文上驗證）
-- **要真正更強** → `claude-opus-5-5-high`，但**只能偶爾用**（見成本表）
+- **批量、機械性** → `gemini-3.8-flash-high`（便宜配額組；舊主力 3.1-pro 寫過 25 頁教學報告，3.8 尚未在同等長文上驗證）
+- **需要推理、寫程式、強判斷** → `gemini-4-argon-high`（知識測驗與 Opus 同分，不吃 Claude 組；但一週約 30 次，挑重要的用）
+- **要異家族的最強判斷** → `claude-opus-5-5-high`，但**只能偶爾用**（見成本表）；Argon 可以先頂替一部分原本要叫 Opus 的工作
 
 模型的 `-high/-medium/-low` 後綴就是推理強度，**不需要另外加 `--effort`**。
 **沒有「設定預設模型」的設定檔選項**，每次呼叫都要用 `--model` 明確指定。
@@ -99,6 +108,9 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 | `claude-opus-4-6-thinking`（已下架，2026-08-29） | 3.59% | 約 24 次 |
 | `claude-sonnet-5-5-high`（2026-10-13，43k tok，**只 1 次樣本**） | 4.32% | **約 23 次** |
 | `claude-opus-5-5-high`（2026-10-13，43k tok，**只 1 次樣本**） | 8.63% | **約 11 次** |
+| `gemini-4-argon-high`（2026-10-16，10 次、平均 54k tok） | **不扣 5h；扣 Argon 週額度 2.3–4.5%（平均 3.3%）** | **一週約 30 次** |
+
+**Argon 的額度是 `/usage` 裡另一列 `gemini-argon-wtu-weekly`**（token_report 顯示為「Gemini 4 Argon weekly」，2026-10-16 起帳本表已改用它換算「還能跑」）。10 次呼叫只有 1 次順帶動到 Gemini 組（0.9%），其餘 0。
 
 **舊 Opus 與 Flash 差 37 倍；Opus 5.5 首次實測約 86 倍**（同樣只回 OK，底盤 token 卻多了 16k），Claude 組比以前更稀缺。 所以：
 
@@ -485,6 +497,16 @@ res = m.supervise(task, criteria, check,
   代表 agy 是登入的。現在 `quota()` 失敗會重試一次、把原因寫進 `agy_meter.QUOTA_LAST["error"]`，
   並回傳上一次成功的快取（`quota_cache.json`）；小工具標題改成 `◇`、第一列註明「N 分鐘前資料（本次查詢逾時）」，
   只有錯誤訊息真的提到登入時才顯示「未登入」。
+
+### 1.3.5～1.4.0 值得知道的變更（2026-10-16 盤點，`agy changelog`）
+
+- **Gemini 4 Argon 不在 changelog 裡**，是伺服器端開放；10-16 上午就能用（議事帳本 D-17 已先用了 8 次）。
+- **1.3.6：模型連線卡住 5 分鐘沒資料會自動取消重試**，不再無限掛住、也不留空回應步驟。
+- **1.3.6：無頭 `-p` 會略過子代理的提問**，子代理繼續做，不會卡著等人回答。
+- **1.3.6：代理執行的版本控制指令不會再卡在看不見的編輯器**（`GIT_EDITOR=false`，`git commit` 沒給 `-m` 會直接失敗）。
+- **1.4.0：啟動時服務短暫失敗不再整段鎖死**（以前會一直回 `Eligibility check failed` 直到重開），現在暫時錯誤會重試。
+- **1.3.5：Auto 模式**（`--mode auto`，安全指令自動核准、離開沙盒的指令先由另一個代理審查）；派工維持既有權限設定，沒改用。
+- 1.3.5／1.4.0 其餘是互動介面（`/compact`、`/diff`、終端機狀態列、`alt+m`）與外掛驗證，無頭派工用不到。
 
 ### 1.2.11～1.3.4 值得知道的變更（2026-10-14 盤點）
 

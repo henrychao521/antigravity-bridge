@@ -49,5 +49,15 @@
    }
   ],
   "load_error": null
+ },
+ "gemini-4-argon-high": {
+  "status": "SUCCESS",
+  "secs": 198.5,
+  "tokens": 83721,
+  "quota": null,
+  "passed": 37,
+  "total": 37,
+  "fails": [],
+  "load_error": null
  }
 }
