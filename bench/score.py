@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""依實測標準答案評分。標準答案來源：2026-08-29 這場 session 的實際 Onshape 執行結果。"""
+"""依實測標準答案評分。標準答案來源：2026-08-29 這場 session 的實際 Onshape 執行結果。
+下面的分數是 8/29 三個模型（現已下架）實際作答的判定，模型名稱是歷史紀錄、不要改；
+現役模型的評分見 score_2026_10_14.py。"""
 import json
 GT = {  # (判定, 依據)
  1: ("✓ 三家都對", {"gemini-3.7-flash-high":1, "gemini-3.1-pro-high":1, "claude-opus-4-6-thinking":1},

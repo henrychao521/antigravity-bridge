@@ -2,6 +2,8 @@ import json, subprocess, sys, time, pathlib, concurrent.futures as cf
 sys.path.insert(0, "/Users/Shared/antigravity-bridge")
 import agy_meter as m
 
+# 2026-08-29 實測紀錄：三個模型都已下架（2026-10-13），且重跑會覆蓋 raw.json（score.py 的評分依據）。
+# 測現役模型請用 run_bench_model.py（另存 raw_<模型>.json）。
 MODELS = ["gemini-3.7-flash-high", "gemini-3.1-pro-high", "claude-opus-4-6-thinking"]
 HERE = pathlib.Path(__file__).resolve().parent
 prompt = (HERE / "quiz.txt").read_text()

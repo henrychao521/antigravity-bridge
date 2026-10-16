@@ -43,5 +43,5 @@ def check(text):
     return False, f"執行測試失敗：{err}"
 
 print("主管模式：派工 → 實際執行測試 → 不過就退回")
-res = m.supervise(TASK, CRITERIA, check, model="gemini-3.7-flash-high", max_rounds=3)
+res = m.supervise(TASK, CRITERIA, check, model="gemini-3.8-flash-high", max_rounds=3)
 print(f"\n結果：{'驗收通過' if res['ok'] else '三回合內未通過'}，共 {len(res['rounds'])} 回合")

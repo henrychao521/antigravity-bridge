@@ -184,6 +184,7 @@ def prompt_for(items):
              "生成後不要檢查、修圖、重生或另做版本，即使結果不完美也一樣。",
              "4. 交給子代理時，每個子代理的 Prompt 依序放：下面這段英文規則（原封不動）、一行「ImageName: 名稱」、一行「Prompt:」、英文提示詞原文。",
              "   " + SUB_RULE,
+             "5. 不要執行任何終端機指令、不要搜尋或讀取檔案、不要查資料庫（2026-10-16：父代理曾跑去 grep／sqlite 找 generate_image，0 張就結束）。",
              "全部完成後只回覆一行：DONE", ""]
     for j in items:
         lines += [f"### ImageName: {j['name']}", j["prompt"], ""]

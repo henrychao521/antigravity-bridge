@@ -1,8 +1,9 @@
 # Antigravity 派工規範
 
 > 貼給新對話視窗用。搭配 `/Users/Shared/antigravity-bridge/` 底下的操作檔案。
-> 最後更新：2026-10-13（agy 1.3.4 模型大換血：3.7 Flash、3.1 Pro、Claude 4.6 全下架，第二～四節改用新 id）
-> 前次：2026-09-10（新增第十一節：教材圖片；第十二節：監測項目與 1.2.0 變更）
+> 最後更新：2026-10-16（各專案腳本殘留的 3.7 Flash 全面改 3.8；第十一節加「生圖指令要明講交給 image-generator 子代理」）
+> 前次：2026-10-13（agy 1.3.4 模型大換血：3.7 Flash、3.1 Pro、Claude 4.6 全下架，第二～四節改用新 id）
+> 更早：2026-09-10（新增第十一節：教材圖片；第十二節：監測項目與 1.2.0 變更）
 
 ## 一、這是什麼
 
@@ -27,6 +28,9 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 帶舊 id 的呼叫在送出前就失敗、0 token，但**會讓整批派工空轉**。agy 升版後先跑 `agy models`
 （不耗額度）對一次清單；`agy_meter.capabilities()` 的 `new_models` 會列出新增的 id。
 注意 Claude 這組現在用 `-high/-medium/-low` 後綴，**沒有 `-thinking` 後綴了**。
+**2026-10-16 又踩一次**：專案裡寫死 `gemini-3.7-flash-high` 的生圖腳本，送出後 7 秒回 `invalid model selection ... not recognized`、
+沒有建立對話，`brain_scan()` 找不到圖，看起來像「全部生圖失敗」。→ 生圖全失敗時先查模型 id，再懷疑配額；
+各專案 `dispatch/` 裡的寫死 id 已全部改成 `gemini-3.8-flash-high`（`agy_usage.py` 單價表保留 3.7 讓舊帳本能歸戶）。
 
 ### 實測比較（2026-10-14，現役模型重跑同一份 8 題測驗＋一題寫程式）
 
@@ -57,7 +61,7 @@ Antigravity 是 Google 的代理式 AI CLI（`agy`），**走 Google AI Pro 訂�
 
 ### 實測比較（2026-08-29，8 題有標準答案的 FeatureScript 知識測驗）
 
-> ⚠️ 下表三個模型都已下架，數字只當歷史參考；3.8 Flash／Claude 5.5 尚未重測（腳本在 `bench/`）。
+> ⚠️ 下表三個模型都已下架，數字只當歷史參考；現役模型已於 2026-10-14 重測，見上一節（腳本在 `bench/`）。
 
 標準答案來源＝同一場 session 在 Onshape 上實際跑出來的結果，不是文獻。
 
@@ -421,6 +425,11 @@ res = m.supervise(task, criteria, check,
    只生單一元件的去背素材（`isolated on a pure seamless white background`），本機複製排列、畫線、上標註。
 4. 兒童教材的人物只拍手或腳，不拍臉。
 5. 同一份教材的提示詞共用同一段風格尾綴，確保光線與質感一致。
+6. **包裝指令要明講「直接交給內建 image-generator 子代理（invoke_subagent）」**（2026-10-16）：父代理有時不呼叫子代理，
+   反而去 grep 檔案、查 sqlite 找「generate_image 在哪」，耗掉時間與額度卻一張都沒生。固定寫上：
+   「生圖請直接交給內建的 image-generator 子代理（invoke_subagent）處理，一張一張來；不要執行任何終端機指令、
+   不要搜尋或讀取檔案、不要查資料庫，也不要多生其他版本。全部完成後只回覆一行：DONE」。
+   範本：`/Volumes/Work/pedometer-lab/art/portrait/agy/gen.py`。
 
 ### 驗收
 
@@ -491,7 +500,7 @@ res = m.supervise(task, criteria, check,
 
 ### 1.1.23～1.2.0 值得知道的變更（官方 changelog）
 
-- **新模型**：`gemini-3.8-flash-high／medium／low`。2026-09-10 還沒有和 3.7 做過實測比較。
+- **新模型**：`gemini-3.8-flash-high／medium／low`。2026-09-10 還沒有和 3.7 做過實測比較。（3.7 已於 2026-10-13 下架；3.8 的實測見第二節）
 - **1.1.28：`--print-timeout` 到時不再報錯**，改成回傳目前已有的部分輸出並正常結束（stderr 有警告）。
   → 第五節第 4 條「逾時回空」的描述已過時，但**長任務仍要放寬 timeout**，否則拿到的是半成品。
 - **1.1.28：讀取網址的預設權限改成先詢問**。headless 沒有人能按允許，需要 `read_url(*)` 在允許清單裡（本機已有）。

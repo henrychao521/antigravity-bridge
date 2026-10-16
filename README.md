@@ -14,7 +14,8 @@ agy -p "提示" --output-format json --model gemini-3.8-flash-high --json-schema
 - 解析結果請讀 **`structured_output`** 欄位，**不要讀 `response`**——schema JSON 會漏進 prose。
 - `agy models` 看可用模型（不耗額度）。1.3.4 起只剩 10 個：Gemini 3.8 Flash、
   **Claude Opus 5.5 / Sonnet 5.5**（各有 `-high/-medium/-low`）、GPT-OSS 120B。
-  3.7 Flash、3.1 Pro、Claude 4.6 已下架（2026-10-13），帶舊 id 會回 `not recognized`。
+  3.7 Flash、3.1 Pro、Claude 4.6 已下架（2026-10-13），帶舊 id 會回 `not recognized`
+  （7 秒內失敗、不建立對話；生圖腳本會看起來像全部失敗，先查 id）。
 - 並行時用 `--conversation <id>` 指定對話；`--continue` 抓的是「最近一個」，會互搶。
 - 每次呼叫有 ~26–30k input token 底盤（harness 系統提示），續問會走 cache。
 - 延遲 2.4s～240s 都出現過，**腳本一定要包 timeout**。
@@ -54,7 +55,7 @@ B − A = 129.486 mm³，等於 Pappus 定理算出的圓角體積解析解，**
 ### 三個模型的知識測驗
 
 8 題有實測標準答案的 FeatureScript 測驗（標準答案來自實際執行結果，非文獻）。
-2026-08-29 測的，**三個模型都已下架**，新模型尚未重測：
+2026-08-29 測的，**三個模型都已下架**（現役模型 2026-10-14 重測結果見規範第二節）：
 
 | 模型 | 得分 | 答錯時平均信心 |
 |---|---|---|
